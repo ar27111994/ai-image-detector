@@ -59,7 +59,10 @@ async function main() {
     browser = await puppeteer.launch({
       headless: true,
       // Puppeteer's defaults include --disable-extensions, which vetoes --load-extension.
-      ignoreDefaultArgs: ['--disable-extensions', '--disable-component-extensions-with-background-pages'],
+      ignoreDefaultArgs: [
+        '--disable-extensions',
+        '--disable-component-extensions-with-background-pages',
+      ],
       args: [
         `--disable-extensions-except=${distDir}`,
         `--load-extension=${distDir}`,

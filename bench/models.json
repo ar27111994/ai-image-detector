@@ -1,0 +1,38 @@
+{
+  "$comment": "Candidate + production model registry. `url` is downloaded and cached to models-cache/ with sha256 verification. `aiLogitIndex` is the index of the AI-generated class in the output logits. mean/std are the model's training normalization (from its preprocessor_config.json).",
+  "models": {
+    "vit-deepfake-int8": {
+      "url": "https://huggingface.co/onnx-community/deepfake_vs_real_image_detection-ONNX/resolve/27f622aab35163c439f6b93722e6bba0711fd6ad/onnx/model_int8.onnx",
+      "sha256": null,
+      "inputSize": 224,
+      "mean": [0.5, 0.5, 0.5],
+      "std": [0.5, 0.5, 0.5],
+      "aiLogitIndex": 1,
+      "labels": ["Real", "Fake"],
+      "license": "Apache-2.0",
+      "provenance": "onnx-community export of dima806/deepfake_vs_real_image_detection (ViT-B/16-224)"
+    },
+    "vit-deepfake-fp32": {
+      "url": "https://huggingface.co/onnx-community/deepfake_vs_real_image_detection-ONNX/resolve/27f622aab35163c439f6b93722e6bba0711fd6ad/onnx/model.onnx",
+      "sha256": null,
+      "inputSize": 224,
+      "mean": [0.5, 0.5, 0.5],
+      "std": [0.5, 0.5, 0.5],
+      "aiLogitIndex": 1,
+      "labels": ["Real", "Fake"],
+      "license": "Apache-2.0",
+      "provenance": "same as above, fp32 reference variant"
+    },
+    "vit-deepfake-fp16": {
+      "url": "https://huggingface.co/onnx-community/deepfake_vs_real_image_detection-ONNX/resolve/27f622aab35163c439f6b93722e6bba0711fd6ad/onnx/model_fp16.onnx",
+      "sha256": null,
+      "inputSize": 224,
+      "mean": [0.5, 0.5, 0.5],
+      "std": [0.5, 0.5, 0.5],
+      "aiLogitIndex": 1,
+      "labels": ["Real", "Fake"],
+      "license": "Apache-2.0",
+      "provenance": "same as above, fp16 variant for WebGPU"
+    }
+  }
+}

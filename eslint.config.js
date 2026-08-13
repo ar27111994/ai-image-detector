@@ -13,6 +13,7 @@ export default [
       'bench/results/**',
       'models-cache/**',
       '.planning/**',
+      '.venv/**',
     ],
   },
   js.configs.recommended,
@@ -42,10 +43,13 @@ export default [
         Response: 'readonly',
         Request: 'readonly',
         AbortController: 'readonly',
+        AbortSignal: 'readonly',
         crypto: 'readonly',
         structuredClone: 'readonly',
         indexedDB: 'readonly',
         DecompressionStream: 'readonly',
+        WritableStream: 'readonly',
+        ReadableStream: 'readonly',
         performance: 'readonly',
         ImageData: 'readonly',
         OffscreenCanvas: 'readonly',
@@ -56,7 +60,7 @@ export default [
     rules: {
       'no-unused-vars': ['error', { argsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' }],
       'no-console': ['warn', { allow: ['info', 'warn', 'error', 'debug'] }],
-      eqeqeq: ['error', 'always'],
+      eqeqeq: ['error', 'always', { null: 'ignore' }],
       'no-var': 'error',
       'prefer-const': 'error',
       'no-throw-literal': 'error',
@@ -111,6 +115,25 @@ export default [
         afterEach: 'readonly',
         vi: 'readonly',
       },
+    },
+  },
+  {
+    // E2E harness: Node process driving a browser (page.evaluate bodies see DOM globals).
+    files: ['tests/e2e/**/*.mjs'],
+    languageOptions: {
+      globals: {
+        process: 'readonly',
+        Buffer: 'readonly',
+        console: 'readonly',
+        document: 'readonly',
+        window: 'readonly',
+        chrome: 'readonly',
+        location: 'readonly',
+        setTimeout: 'readonly',
+      },
+    },
+    rules: {
+      'no-console': 'off',
     },
   },
 ];
