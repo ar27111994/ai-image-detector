@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'gsd/**']
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-build-test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install (locked)
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Format check
+        run: npm run format:check
+
+      - name: Unit + integration tests
+        run: npm run cover
+
+      - name: Build extension
+        run: npm run build
+
+      - name: Verify dist layout
+        shell: pwsh
+        run: |
+          $required = @('dist/manifest.json', 'dist/background.js', 'dist/offscreen.js', `
+            'dist/content.js', 'dist/pages/offscreen.html', 'dist/pages/popup.html', `
+            'dist/vendor/ort-wasm-simd-threaded.jsep.wasm')
+          foreach ($f in $required) {
+            if (-not (Test-Path $f)) { throw "missing $f" }
+          }
+          Write-Host 'dist layout OK'
+
+  e2e:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install (locked)
+        run: npm ci
+
+      - name: Build extension
+        run: npm run build
+
+      - name: E2E (headless Chrome, real extension load)
+        run: npm run test:e2e

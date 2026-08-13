@@ -40,16 +40,19 @@ Signal catalog for the non-neural layer. All parsing is local, byte-level, no ne
    radial energy bins + high-frequency ratio (r>N/4). Weak alone (55-80%), fusion feature only.
 
 ## Rejected / infeasible client-side
+
 - Google SynthID (no public decoder), Meta Stable Signature / WAM (neural extractor too heavy),
   SD DWT-DCT invisible watermark (no JS decoder, fragile to re-hosting), double-JPEG DCT histogram
   analysis (CPU-heavy, low value).
 
 ## Libraries
+
 - exifr (MIT): EXIF/XMP/IPTC across JPEG/PNG/WebP/AVIF/HEIC; works in SW/offscreen; ~1ms/file.
 - fft.js (MIT): 1D FFT composed to 2D; 256x256 2D ~5-15ms.
 - DecompressionStream (native): zTXt/iTXt inflate.
 
 ## Fusion policy (locked)
+
 - Any Tier-1/Tier-2 DEFINITIVE hit => score 0.99 (still record neural score for display/debug).
 - Otherwise calibrated logistic fusion over [neural score(s), exif_absent, dqt_match, fft features]
   fit on internal benchmark train split; coefficients serialized to `src/ensemble/calibration.json`

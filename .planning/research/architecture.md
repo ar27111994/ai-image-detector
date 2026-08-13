@@ -40,14 +40,17 @@ Content script (per page)          Service worker (orchestrator)        Offscree
 ```
 
 ## SessionOptions baseline
+
 `{ executionProviders: ['webgpu','wasm'] (adaptive), graphOptimizationLevel: 'all',
 intraOpNumThreads: 1, freeDimensionOverrides for static 224x224 if dynamic }`
 
 ## Preprocessing (shared JS module, mirrored in Node bench)
+
 decode -> resize to model input (224/256/384/512 per model config) -> RGB float CHW normalized with
 per-model mean/std (from preprocessor_config.json; ImageNet defaults otherwise).
 
 ## Risks
+
 - WebGPU absent in offscreen doc -> WASM int8 ViT-B ~0.3-1s/image single-thread: acceptable async,
   mitigated by queue + viewport prioritization + caching.
 - Page CSP does NOT affect content-script isolated world code, but page-CSP CAN block

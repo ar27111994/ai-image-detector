@@ -5,7 +5,7 @@
 - Milestone: 1
 - Phase: 1 (Foundation + empirical model selection)
 - Last action: new-project init complete (PROJECT/REQUIREMENTS/ROADMAP written; 3 research agents done)
-- Next: write research/*.md consolidations, git init, Phase 1 plans, execute Phase 1
+- Next: write research/\*.md consolidations, git init, Phase 1 plans, execute Phase 1
 
 ## Active Decisions
 
@@ -27,3 +27,6 @@
 
 2026-08-13: GSD init; bounty requirements transcribed; parallel research (models / ORT-MV3 /
 forensics) completed; GitHub CLI authenticated as ar27111994 (push + repo creation possible).
+2026-08-13: GitHub repo created (github.com/ar27111994/ai-image-detector), main pushed, milestone
+branch gsd/m1-ai-image-detector created. Phase 1 planned (4 tasks: scaffold, bench harness,
+model conversion, evaluation/selection).
