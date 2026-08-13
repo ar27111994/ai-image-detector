@@ -1,0 +1,23 @@
+{
+  "project_name": "AI Image Detector",
+  "milestone": 1,
+  "current_phase": 0,
+  "mode": "autonomous",
+  "depth": "thorough",
+  "model_profile": "quality",
+  "workflow": {
+    "research": true,
+    "plan_check": true,
+    "verifier": true,
+    "browser_uat": true
+  },
+  "parallelization": {
+    "enabled": true,
+    "max_concurrent": 4
+  },
+  "git": {
+    "branching_strategy": "per-milestone",
+    "phase_branch_template": "gsd/phase-{phase}-{slug}",
+    "milestone_branch_template": "gsd/m{milestone}-{slug}"
+  }
+}

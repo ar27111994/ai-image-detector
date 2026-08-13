@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+release/
+
+# Benchmark data (downloaded at bench time; not committed)
+bench/data/
+bench/cache/
+models-cache/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.log
+.vscode/
+.idea/
+
+# Test artifacts
+coverage/
+test-results/
+*.tsbuildinfo
