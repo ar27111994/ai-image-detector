@@ -165,35 +165,45 @@ describe('fusion.fuseSignals', () => {
     expect(out.verdict).toBe('ai');
   });
 
-  it('passes through neural score when calibration disabled and no forensic', () => {
-    const out = fuseSignals({
-      neuralScore: 0.8,
-      forensic: {
-        definitive: false,
-        summary: [],
-        features: { format: 'jpeg', hasCameraExif: null },
+  it('passes through neural score when calibration is disabled and no forensic', () => {
+    const out = fuseSignals(
+      {
+        neuralScore: 0.8,
+        forensic: {
+          definitive: false,
+          summary: [],
+          features: { format: 'jpeg', hasCameraExif: null },
+        },
       },
-    });
+      { calibration: { enabled: false, a: 1, b: 0 } },
+    );
     expect(out.score).toBeCloseTo(0.8, 5);
   });
 
   it('camera EXIF slightly lowers the score', () => {
-    const withCam = fuseSignals({
-      neuralScore: 0.5,
-      forensic: {
-        definitive: false,
-        summary: [],
-        features: { format: 'jpeg', hasCameraExif: true },
+    const off = { calibration: { enabled: false, a: 1, b: 0 } };
+    const withCam = fuseSignals(
+      {
+        neuralScore: 0.5,
+        forensic: {
+          definitive: false,
+          summary: [],
+          features: { format: 'jpeg', hasCameraExif: true },
+        },
       },
-    });
-    const without = fuseSignals({
-      neuralScore: 0.5,
-      forensic: {
-        definitive: false,
-        summary: [],
-        features: { format: 'jpeg', hasCameraExif: false },
+      off,
+    );
+    const without = fuseSignals(
+      {
+        neuralScore: 0.5,
+        forensic: {
+          definitive: false,
+          summary: [],
+          features: { format: 'jpeg', hasCameraExif: false },
+        },
       },
-    });
+      off,
+    );
     expect(withCam.score).toBeLessThan(without.score);
   });
 });

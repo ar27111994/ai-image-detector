@@ -125,6 +125,12 @@ function runWithTimeout(sess, feeds, ms) {
 
 /**
  * Decode + preprocess + run inference on image bytes.
+ *
+ * Patch aggregation: for images meaningfully larger than the model input, we score the full
+ * frame AND a center + 4-corner crop grid, then average. Downscaling a large AI image to 224/256
+ * washes out the high-frequency artifacts the detector relies on; crop patches preserve them.
+ * (Robustness technique — see docs/ARCHITECTURE.md.)
+ *
  * @param {ArrayBuffer} bytes encoded image (jpeg/png/webp/gif/avif)
  * @returns {Promise<{ score: number, rawOutput: number[], width: number, height: number, latencyMs: number, ep: string }>}
  */
@@ -143,26 +149,53 @@ export async function analyzeImageBytes(bytes) {
   const height = bitmap.height;
 
   const size = activeSpec.inputSize;
-  const canvas = new OffscreenCanvas(size, size);
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
-  ctx.drawImage(bitmap, 0, 0, size, size);
+  const scores = [];
+
+  // Full-frame view (always).
+  scores.push(await inferView(bitmap, 0, 0, width, height, size));
+
+  // Patch grid when the source is large enough that downscaling would dominate.
+  const minDim = Math.min(width, height);
+  if (minDim >= size * 2) {
+    const crop = Math.floor(minDim * 0.5); // 50% crops
+    const halfW = Math.floor((crop * (width / minDim)) / 2) * 2;
+    const halfH = Math.floor((crop * (height / minDim)) / 2) * 2;
+    const offsets = [
+      [0, 0],
+      [width - halfW, 0],
+      [0, height - halfH],
+      [width - halfW, height - halfH],
+      [Math.floor((width - halfW) / 2), Math.floor((height - halfH) / 2)],
+    ];
+    for (const [ox, oy] of offsets) {
+      scores.push(await inferView(bitmap, ox, oy, halfW, halfH, size));
+    }
+  }
   bitmap.close();
-  const imageData = ctx.getImageData(0, 0, size, size);
 
-  const tensor = preprocessRgba(imageData.data, size, size, activeSpec);
-  const feeds = { [session.inputNames[0]]: new ort.Tensor('float32', tensor.data, tensor.dims) };
-  const results = await session.run(feeds);
-  const output = Array.from(results[session.outputNames[0]].data);
-
-  const score = scoreFromOutput(output, activeSpec);
+  const score = scores.reduce((a, b) => a + b, 0) / scores.length;
   return {
     score,
-    rawOutput: output,
+    rawOutput: scores,
     width,
     height,
     latencyMs: Math.round(performance.now() - t0),
     ep: activeEp,
+    views: scores.length,
   };
+}
+
+/** Render one source rect of the bitmap to the model input and run inference. */
+async function inferView(bitmap, sx, sy, sw, sh, size) {
+  const canvas = new OffscreenCanvas(size, size);
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(bitmap, sx, sy, sw, sh, 0, 0, size, size);
+  const imageData = ctx.getImageData(0, 0, size, size);
+  const tensor = preprocessRgba(imageData.data, size, size, activeSpec);
+  const feeds = { [session.inputNames[0]]: new ort.Tensor('float32', tensor.data, tensor.dims) };
+  const results = await session.run(feeds);
+  const output = Array.from(results[session.outputNames[0]].data);
+  return scoreFromOutput(output, activeSpec);
 }
 
 /**

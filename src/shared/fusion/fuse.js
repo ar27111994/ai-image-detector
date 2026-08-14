@@ -34,13 +34,14 @@ export function calibrate(neuralScore, cal = CALIBRATION) {
  */
 export function fuseSignals({ neuralScore, forensic }, opts = {}) {
   const threshold = opts.threshold ?? DEFAULT_THRESHOLD;
+  const cal = opts.calibration ?? CALIBRATION;
   const reasons = [...(forensic?.summary ?? [])];
 
   if (forensic?.definitive) {
     return { score: 0.99, verdict: VERDICT.AI, reasons };
   }
 
-  const calibrated = calibrate(neuralScore);
+  const calibrated = calibrate(neuralScore, cal);
 
   // Weak-signal nudge: photographic JPEG with zero camera EXIF slightly raises suspicion;
   // presence of camera EXIF slightly lowers it. Small, bounded, and documented.

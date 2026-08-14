@@ -95,8 +95,30 @@
       "std": [0.229, 0.224, 0.225],
       "aiLogitIndex": 0,
       "labels": ["artificial", "real"],
-      "license": "unknown (no license declared; benchmark-only until clarified)",
-      "provenance": "haywoodsloan/ai-image-detector-dev-deploy (SwinV2); id2label {0: artificial, 1: real}"
+      "license": "Apache-2.0",
+      "provenance": "haywoodsloan/ai-image-detector-dev-deploy (SwinV2); id2label {0: artificial, 1: real}; code repo haywoodsloan/ai-image-detector is Apache-2.0"
+    },
+    "haywoodsloan-int8": {
+      "path": "models-cache/haywoodsloan-int8.onnx",
+      "sha256": null,
+      "inputSize": 256,
+      "mean": [0.485, 0.456, 0.406],
+      "std": [0.229, 0.224, 0.225],
+      "aiLogitIndex": 0,
+      "labels": ["artificial", "real"],
+      "license": "Apache-2.0",
+      "provenance": "int8 dynamic quantization (Conv excluded) of haywoodsloan-fp32; SHIPPING WASM candidate"
+    },
+    "haywoodsloan-fp16": {
+      "path": "models-cache/haywoodsloan-fp16.onnx",
+      "sha256": null,
+      "inputSize": 256,
+      "mean": [0.485, 0.456, 0.406],
+      "std": [0.229, 0.224, 0.225],
+      "aiLogitIndex": 0,
+      "labels": ["artificial", "real"],
+      "license": "Apache-2.0",
+      "provenance": "fp16 variant (NOTE: SwinV2 fp16 fails ORT CPU Loop type-inference; WebGPU-only)"
     }
   }
 }

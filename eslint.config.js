@@ -133,6 +133,7 @@ export default [
         chrome: 'readonly',
         location: 'readonly',
         setTimeout: 'readonly',
+        clearTimeout: 'readonly',
       },
     },
     rules: {
