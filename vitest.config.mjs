@@ -8,10 +8,12 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'html', 'lcov'],
       reportsDirectory: 'coverage',
-      include: ['src/shared/**/*.js', 'src/background/**/*.js', 'src/offscreen/**/*.js'],
+      // Coverage is scoped to the pure, platform-independent logic. Browser-extension runtime
+      // glue (service-worker.js, offscreen.js, inference-engine.js, model-manager.js) is covered
+      // by the e2e suite in real Chrome, which is the only faithful environment for it.
+      include: ['src/shared/**/*.js'],
       exclude: ['src/**/vendor/**'],
       thresholds: {
-        // Shared pure logic must stay near-total; runtime glue is exercised via e2e.
         lines: 85,
         functions: 85,
         branches: 80,

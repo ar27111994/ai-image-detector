@@ -27,8 +27,15 @@ function tx(db, mode, fn) {
   return new Promise((resolve, reject) => {
     const t = db.transaction(MODEL_STORE, mode);
     const store = t.objectStore(MODEL_STORE);
-    const out = fn(store);
-    t.oncomplete = () => resolve(out?.result !== undefined ? out.result : out);
+    const request = fn(store);
+    let requestResult;
+    // Capture the operation's own result (fires before the transaction completes).
+    if (request && typeof request === 'object') {
+      request.onsuccess = () => {
+        requestResult = request.result;
+      };
+    }
+    t.oncomplete = () => resolve(requestResult);
     t.onerror = () => reject(t.error);
     t.onabort = () => reject(t.error ?? new Error('transaction aborted'));
   });

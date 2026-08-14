@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   isRequest,
   isResponse,
@@ -6,6 +6,8 @@ import {
   makeOk,
   makeRequest,
   nextId,
+  registerHandler,
+  sendRequest,
   withTimeout,
 } from '../../src/shared/protocol.js';
 
@@ -52,5 +54,83 @@ describe('protocol', () => {
 
   it('withTimeout propagates underlying rejection', async () => {
     await expect(withTimeout(Promise.reject(new Error('nope')), 100)).rejects.toThrow('nope');
+  });
+});
+
+describe('protocol.registerHandler + sendRequest', () => {
+  it('dispatches by type and returns ok response', async () => {
+    const listeners = [];
+    globalThis.chrome = {
+      runtime: {
+        onMessage: { addListener: (fn) => listeners.push(fn) },
+        sendMessage: vi.fn(async (msg) => {
+          // simulate the round trip through the registered listener
+          for (const fn of listeners) {
+            let responded = null;
+            const isAsync = fn(msg, {}, (r) => (responded = r));
+            if (isAsync) {
+              await new Promise((r) => setTimeout(r, 10));
+              if (responded) return responded;
+            }
+          }
+          return undefined;
+        }),
+      },
+    };
+    registerHandler({ ping: async () => ({ pong: true }) });
+    const res = await sendRequest(makeRequest('ping', {}, null));
+    expect(res.ok).toBe(true);
+    expect(res.result).toEqual({ pong: true });
+  });
+
+  it('returns an error response when the handler throws', async () => {
+    const listeners = [];
+    globalThis.chrome = {
+      runtime: {
+        onMessage: { addListener: (fn) => listeners.push(fn) },
+        sendMessage: vi.fn(async (msg) => {
+          for (const fn of listeners) {
+            let responded = null;
+            if (fn(msg, {}, (r) => (responded = r))) {
+              await new Promise((r) => setTimeout(r, 10));
+              return responded;
+            }
+          }
+          return undefined;
+        }),
+      },
+    };
+    registerHandler({
+      boom: async () => {
+        throw new Error('kaboom');
+      },
+    });
+    const res = await sendRequest(makeRequest('boom', {}, null));
+    expect(res.ok).toBe(false);
+    expect(res.error.message).toContain('kaboom');
+  });
+
+  it('ignores messages with no matching handler', () => {
+    const listeners = [];
+    globalThis.chrome = { runtime: { onMessage: { addListener: (fn) => listeners.push(fn) } } };
+    registerHandler({ a: () => 1 });
+    const fn = listeners[0];
+    const responded = [];
+    const isAsync = fn(makeRequest('unhandled', {}, null), {}, (r) => responded.push(r));
+    expect(isAsync).toBe(false);
+    expect(responded).toEqual([]);
+  });
+
+  it('respects targetFilter', () => {
+    const listeners = [];
+    globalThis.chrome = { runtime: { onMessage: { addListener: (fn) => listeners.push(fn) } } };
+    registerHandler({ a: () => 1 }, { targetFilter: 'offscreen' });
+    const fn = listeners[0];
+    // wrong target -> ignored
+    expect(fn(makeRequest('a', {}, 'background'), {}, () => {})).toBe(false);
+    // matching target -> handled (async)
+    const responded = [];
+    const isAsync = fn(makeRequest('a', {}, 'offscreen'), {}, (r) => responded.push(r));
+    expect(isAsync).toBe(true);
   });
 });

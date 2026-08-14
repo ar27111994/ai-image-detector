@@ -129,6 +129,62 @@ describe('c2pa.detectC2pa', () => {
     expect(res.present).toBe(false);
     expect(res.hit).toBe(false);
   });
+
+  it('detects a C2PA manifest in a JPEG APP11 segment with a generative claim', () => {
+    const enc = new TextEncoder();
+    const uuid = [
+      0x63, 0x32, 0x6d, 0x61, 0x00, 0x11, 0x00, 0x10, 0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b,
+      0x71,
+    ];
+    const claim = enc.encode('{"claim_generator":"DALL-E 3","actions":["c2pa.ai.generative"]}');
+    const jumbf = new Uint8Array([0x4a, 0x50, 0, 1, 0, 0, 0, 1, ...uuid, ...claim]); // "JP" + box + uuid + claim
+    const segLen = jumbf.length + 2;
+    const jpeg = new Uint8Array([
+      0xff,
+      0xd8,
+      0xff,
+      0xeb,
+      (segLen >>> 8) & 0xff,
+      segLen & 0xff,
+      ...jumbf,
+      0xff,
+      0xd9,
+    ]).buffer;
+    const res = detectC2pa(jpeg, 'jpeg');
+    expect(res.present).toBe(true);
+    expect(res.hit).toBe(true);
+    expect(res.signals.join(' ')).toMatch(/c2pa\.ai\.generative|DALL-E/i);
+  });
+
+  it('detects a C2PA manifest in a WebP C2PA chunk', () => {
+    const enc = new TextEncoder();
+    const uuid = [
+      0x63, 0x32, 0x6d, 0x61, 0x00, 0x11, 0x00, 0x10, 0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b,
+      0x71,
+    ];
+    const claim = enc.encode('{"claim_generator":"Microsoft Designer"}');
+    const jumbf = new Uint8Array([...uuid, ...claim]);
+    const chunk = [...enc.encode('C2PA'), jumbf.length & 0xff, 0, 0, 0, ...jumbf];
+    if (jumbf.length % 2) chunk.push(0);
+    const webp = new Uint8Array([
+      0x52,
+      0x49,
+      0x46,
+      0x46,
+      (chunk.length + 4) & 0xff,
+      0,
+      0,
+      0,
+      0x57,
+      0x45,
+      0x42,
+      0x50,
+      ...chunk,
+    ]).buffer;
+    const res = detectC2pa(webp, 'webp');
+    expect(res.present).toBe(true);
+    expect(res.generators.join(' ')).toMatch(/Microsoft Designer/i);
+  });
   it('detects a C2PA manifest store in PNG caBX with generative claim', () => {
     const enc = new TextEncoder();
     const uuid = [
