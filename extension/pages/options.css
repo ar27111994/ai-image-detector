@@ -21,3 +21,65 @@ body {
 h1 {
   font-size: 18px;
 }
+
+.opt-section {
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.2);
+}
+
+.opt-section h2 {
+  font-size: 14px;
+  margin: 0 0 12px;
+}
+
+.opt-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+
+.opt-row label {
+  flex: 1;
+}
+
+.opt-row input[type='number'] {
+  width: 72px;
+}
+
+.site-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.site-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 13px;
+}
+
+.danger-btn {
+  background: #c62828;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.ok {
+  color: #2e7d32;
+}
+.warn {
+  color: #b26a00;
+}
+.muted {
+  opacity: 0.65;
+  font-size: 12px;
+}

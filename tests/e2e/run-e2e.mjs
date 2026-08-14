@@ -8,12 +8,67 @@
  * Usage: npm run build && npm run test:e2e
  */
 import { createServer } from 'node:http';
+import { spawn } from 'node:child_process';
+import os from 'node:os';
 import path from 'node:path';
+import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const distDir = path.join(repoRoot, 'dist');
+
+/**
+ * Launch Chrome-for-Testing with the extension and connect via CDP.
+ *
+ * We spawn Chrome directly instead of puppeteer.launch() because launch() injects
+ * `--enable-automation`, which (on Chrome 139 / CfT) unreliably suppresses
+ * `--load-extension`. Spawning ourselves and connecting via the DevTools endpoint is
+ * deterministic. A fresh temp profile per run mirrors the maintainers' clean-profile eval.
+ */
+async function launchWithExtension() {
+  const chrome = puppeteer.executablePath();
+  const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'aid-e2e-'));
+  const proc = spawn(
+    chrome,
+    [
+      '--headless=new',
+      '--no-first-run',
+      `--user-data-dir=${profile}`,
+      `--disable-extensions-except=${distDir}`,
+      `--load-extension=${distDir}`,
+      '--remote-debugging-port=0',
+      'about:blank',
+    ],
+    { stdio: ['ignore', 'pipe', 'pipe'] },
+  );
+  const wsEndpoint = await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('no devtools endpoint from Chrome')), 30000);
+    proc.stderr.on('data', (d) => {
+      const m = d.toString().match(/DevTools listening on (ws:\/\/\S+)/);
+      if (m) {
+        clearTimeout(timer);
+        resolve(m[1]);
+      }
+    });
+    proc.on('exit', () => reject(new Error('Chrome exited before DevTools endpoint')));
+  });
+  const browser = await puppeteer.connect({ browserWSEndpoint: wsEndpoint });
+  return { browser, proc, profile };
+}
+
+function killChrome(proc, profile) {
+  try {
+    proc.kill('SIGKILL');
+  } catch {
+    /* already gone */
+  }
+  try {
+    fs.rmSync(profile, { recursive: true, force: true });
+  } catch {
+    /* best effort */
+  }
+}
 
 const FIXTURE_PAGE = `<!doctype html>
 <html><head><title>e2e fixture</title></head>
@@ -54,22 +109,10 @@ async function waitForServiceWorker(browser, timeoutMs = 20000) {
 
 async function main() {
   const { server, port } = await startFixtureServer();
-  let browser;
+  let ctx = null;
   try {
-    browser = await puppeteer.launch({
-      headless: true,
-      // Puppeteer's defaults include --disable-extensions, which vetoes --load-extension.
-      ignoreDefaultArgs: [
-        '--disable-extensions',
-        '--disable-component-extensions-with-background-pages',
-      ],
-      args: [
-        `--disable-extensions-except=${distDir}`,
-        `--load-extension=${distDir}`,
-        '--no-first-run',
-        '--disable-features=Translate',
-      ],
-    });
+    ctx = await launchWithExtension();
+    const { browser } = ctx;
 
     // MV3 service workers start lazily — only when a page they match is loaded or an event
     // fires. Navigate to a matching page FIRST, then poll for the worker target.
@@ -98,7 +141,12 @@ async function main() {
 
     console.log('[e2e] smoke test passed: SW alive, content script connected');
   } finally {
-    await browser?.close();
+    if (ctx) {
+      await ctx.browser.disconnect();
+      killChrome(ctx.proc, ctx.profile);
+    } else {
+      server.close();
+    }
     server.close();
   }
 }

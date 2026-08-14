@@ -31,5 +31,77 @@ body {
 .popup-status {
   margin-top: 12px;
   font-size: 13px;
-  opacity: 0.8;
+}
+
+.popup-threshold,
+.popup-site {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(128, 128, 128, 0.25);
+}
+
+.popup-threshold label {
+  display: block;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.popup-threshold input[type='range'] {
+  width: 100%;
+}
+
+.site-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.popup-footer {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(128, 128, 128, 0.25);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.status-pill {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.status-pill.ok {
+  background: rgba(46, 125, 50, 0.15);
+  color: #2e7d32;
+}
+.status-pill.busy {
+  background: rgba(25, 118, 210, 0.15);
+  color: #1976d2;
+}
+.status-pill.warn {
+  background: rgba(249, 168, 37, 0.18);
+  color: #b26a00;
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  color: #1976d2;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.muted {
+  opacity: 0.65;
+  font-size: 12px;
+}
+
+.popup-error {
+  color: #c62828;
+  font-size: 13px;
 }
