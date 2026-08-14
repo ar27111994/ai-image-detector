@@ -2,11 +2,12 @@
 
 ## Current Position
 
-- Milestone: 1
-- Phase: 3 (Detection UX) — content script + badges in progress
-- Last action: Phase 1 model evaluation COMPLETE (docs/BENCHMARK.md); Phase 2 core committed
-- Next: finish Phase 3 (popup/options/onboarding), Phase 4 (FFT + calibration fit),
-  Phase 5 (e2e + accuracy gate), Phase 6 (docs/release)
+- Milestone: 1 — COMPLETE (v1.0.0)
+- Phase: 6 done (docs + release packaging)
+- Last action: clean-clone reproducibility verified (`npm ci && npm run build && npm test &&
+npm run test:e2e` all pass on a fresh clone); release zip packed (7.8MB); pipeline accuracy
+  84.5% BA @ 0.65 raw / 80.6% augmented — clears the 75% bounty bar and 80% internal gate.
+- Next: final self-review, submit claim on poidh.xyz (manual step by owner).
 
 ## Environment gotchas (Chrome 139 / puppeteer 24) — see 01-1-SUMMARY.md
 
@@ -18,15 +19,12 @@
 
 - Stack: vanilla JS ES2022 + esbuild; Vitest unit; Puppeteer e2e; onnxruntime-node for bench
 - Inference: ONNX Runtime Web vendored; offscreen document holds sessions; SW orchestrates only
-- **Model (measured on 471-image internal benchmark, raw split, threshold 0.65):**
-  - haywoodsloan/ai-image-detector-dev-deploy (SwinV2, 195M): **BA 81.2%** (TPR 63.0/TNR 99.4) —
-    BEST, but 909MB fp32 (int8 326MB clean, drift 0.0015). **No license declared.**
-  - wkaandemir (CLIP-LoRA, MIT): BA 61.8% (TPR 94.6/TNR 29.0) — good recall, poor precision.
-  - ateeqq SigLIP (Apache-2.0): BA 71.7% (TPR 61.4/TNR 81.9).
-  - capcheck ViT (Apache-2.0): BA 53.3%. dima806 ViT (Apache-2.0): BA 50.0% (fails modern gens).
-  - Ensembles (mean/max/OR) do NOT beat haywoodsloan alone.
-  - **Strategy: haywoodsloan as neural backbone + forensic metadata layer to lift TPR. MUST
-    resolve its license or replace before shipping.** Contact author / find licensed equivalent.
+- **Model — RESOLVED & SHIPPED:** haywoodsloan/ai-image-detector (SwinV2, 195M). License confirmed
+  **Apache-2.0** via its code repo (github.com/haywoodsloan/ai-image-detector LICENSE.md). Shipped
+  as int8 (Conv excluded), 311MB, published to GitHub Release `models-v1` with pinned SHA-256.
+  Selection results: dima806 50.0%, capcheck 53.3%, wkaandemir 61.8%, ateeqq 71.7%, haywoodsloan
+  81.2% raw; **full calibrated pipeline 84.5% BA @ 0.65 raw / 80.6% augmented**. Ensembles did not
+  beat it. All in docs/BENCHMARK.md + docs/MODEL.md.
 - Quantization finding: int8 dynamic CORRUPTS CLIP models (Δp≈0.29) but is CLEAN for SwinV2
   (Δ=0.0015). Ship fp16 for WebGPU; int8 or fp32 for WASM depending on final model.
 - Score calibration targets the 0.65 operating point (fit on internal public data only)
