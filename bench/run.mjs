@@ -24,7 +24,10 @@ const MANIFEST_PATH = path.join(DATA_DIR, 'manifest.jsonl');
 function parseArgs(argv) {
   const args = { model: null, limit: 0, only: 'all', concurrency: 4, tag: null };
   for (let i = 2; i < argv.length; i++) {
-    const [key, value] = argv[i].replace(/^--/, '').split('=');
+    const token = argv[i].replace(/^--/, '');
+    const eq = token.indexOf('=');
+    const key = eq >= 0 ? token.slice(0, eq) : token;
+    const value = eq >= 0 ? token.slice(eq + 1) : argv[++i];
     if (key in args) args[key] = ['limit', 'concurrency'].includes(key) ? Number(value) : value;
   }
   if (!args.model) throw new Error('--model <registry-name|path.onnx> is required');
@@ -93,8 +96,13 @@ async function main() {
           [inputName]: new ort.Tensor('float32', tensor.data, tensor.dims),
         };
         const results = await session.run(feeds);
-        const logits = results[outputName].data;
-        const score = aiProbability(logits, spec.aiLogitIndex);
+        const output = results[outputName].data;
+        // Two model output conventions are supported:
+        //  - 2-class logits + aiLogitIndex (softmax)      [dima806, Ateeqq]
+        //  - outputType 'p_real': calibrated p(real) scalar (temperature+sigmoid baked in),
+        //    so AI probability = 1 - p_real               [wkaandemir]
+        const score =
+          spec.outputType === 'p_real' ? 1 - output[0] : aiProbability(output, spec.aiLogitIndex);
         outLines.push(
           JSON.stringify({
             id: entry.id,

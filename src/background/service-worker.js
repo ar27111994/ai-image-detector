@@ -1,22 +1,266 @@
 /**
- * MV3 service worker: orchestration only.
- * Phase 1 scaffold: lifecycle logging + ping/pong health check.
- * Phase 2 adds: model download manager, image fetching, offscreen routing, cache.
+ * MV3 service worker: orchestration only (never holds the ONNX session — it can be killed).
+ *
+ * Responsibilities:
+ *  - ensure exactly one offscreen document exists (it owns inference)
+ *  - fetch cross-origin image bytes (host_permissions bypass page CORS)
+ *  - LRU-cache analysis results by content hash
+ *  - route content-script analysis requests to the offscreen doc
+ *  - model setup: download/verify/store via model-manager; open onboarding on first install
  */
-import { MSG } from '../shared/constants.js';
+import {
+  ANALYSIS_CACHE_MAX_ENTRIES,
+  MSG,
+  OFFSCREEN_DOCUMENT_PATH,
+  STORAGE_KEYS,
+} from '../shared/constants.js';
+import { isRequest, makeError, makeOk, sendRequest } from '../shared/protocol.js';
+import { imageContentKey } from '../shared/hash.js';
+import { LruCache } from '../shared/lru-cache.js';
+import * as modelManager from './model-manager.js';
+import { isSiteEnabled, loadSettings, setSiteEnabled } from '../shared/settings.js';
 
-chrome.runtime.onInstalled.addListener((details) => {
+let creatingOffscreen = null;
+const analysisCache = new LruCache(ANALYSIS_CACHE_MAX_ENTRIES);
+let cachedManifest = null;
+
+/* ---------------------------------- setup ---------------------------------- */
+
+chrome.runtime.onInstalled.addListener(async (details) => {
   console.info('[ai-detector] installed:', details.reason);
+  if (details.reason === 'install') {
+    const ready = await modelManager.isModelReady().catch(() => false);
+    if (!ready) {
+      await chrome.tabs.create({ url: chrome.runtime.getURL('pages/onboarding.html') });
+    }
+  }
 });
 
 chrome.runtime.onStartup.addListener(() => {
   console.info('[ai-detector] browser startup');
 });
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message?.type === MSG.PING) {
-    sendResponse({ type: MSG.PONG, ts: Date.now() });
-    return false;
+/* ----------------------------- offscreen lifecycle ----------------------------- */
+
+/** Create the offscreen document exactly once; concurrent callers share the same promise. */
+async function ensureOffscreenDocument() {
+  const url = chrome.runtime.getURL(OFFSCREEN_DOCUMENT_PATH);
+  const existing = await chrome.runtime.getContexts({
+    contextTypes: ['OFFSCREEN_DOCUMENT'],
+    documentUrls: [url],
+  });
+  if (existing.length > 0) return;
+
+  if (creatingOffscreen) {
+    await creatingOffscreen;
+    return;
   }
-  return false;
+  creatingOffscreen = chrome.offscreen
+    .createDocument({
+      url: OFFSCREEN_DOCUMENT_PATH,
+      reasons: ['BLOBS', 'WORKERS'],
+      justification: 'Run local ONNX image-classification inference and image preprocessing',
+    })
+    .catch((err) => {
+      if (!/already exists/i.test(String(err?.message))) throw err;
+    })
+    .finally(() => {
+      creatingOffscreen = null;
+    });
+  await creatingOffscreen;
+}
+
+/** Warm the inference session inside the offscreen document. */
+async function ensureInferenceReady() {
+  if (!(await modelManager.isModelReady())) {
+    throw Object.assign(new Error('model not downloaded — complete setup first'), {
+      code: 'MODEL_NOT_READY',
+    });
+  }
+  await ensureOffscreenDocument();
+  if (!cachedManifest) cachedManifest = await modelManager.loadManifest();
+  const response = await sendRequest(
+    {
+      id: `ensure-${Date.now()}`,
+      type: MSG.OFFSCREEN_ENSURE_READY,
+      target: 'offscreen',
+      payload: { manifest: cachedManifest },
+    },
+    { timeoutMs: 180000 },
+  );
+  if (!response?.ok) {
+    throw Object.assign(new Error(response?.error?.message ?? 'offscreen init failed'), {
+      code: response?.error?.code,
+    });
+  }
+  return response.result;
+}
+
+/* ------------------------------- image fetching ------------------------------- */
+
+const MAX_IMAGE_BYTES = 32 * 1024 * 1024; // 32MB safety cap
+
+async function fetchImageBytes(url) {
+  const response = await fetch(url, { credentials: 'omit', cache: 'force-cache' });
+  if (!response.ok) throw new Error(`image fetch failed: HTTP ${response.status}`);
+  const length = Number(response.headers.get('content-length')) || 0;
+  if (length > MAX_IMAGE_BYTES) throw new Error(`image too large (${length} bytes)`);
+  const blob = await response.blob();
+  if (blob.size > MAX_IMAGE_BYTES) throw new Error(`image too large (${blob.size} bytes)`);
+  return await blob.arrayBuffer();
+}
+
+/* ------------------------------- message routing ------------------------------- */
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (!isRequest(message)) return false;
+
+  const respond = (promise) => {
+    promise
+      .then((result) => sendResponse(makeOk(message, result)))
+      .catch((err) => sendResponse(makeError(message, err?.message ?? String(err), err?.code)));
+    return true;
+  };
+
+  switch (message.type) {
+    case MSG.PING:
+      sendResponse(makeOk(message, { context: 'background', ts: Date.now() }));
+      return false;
+
+    case MSG.GET_SETTINGS:
+      return respond(loadSettings());
+
+    case MSG.GET_STATUS:
+      return respond(getStatus());
+
+    case MSG.GET_TAB_STATS:
+      return respond(Promise.resolve(getTabStats(sender.tab?.id)));
+
+    case MSG.SET_SITE_ENABLED:
+      return respond(setSiteEnabledFor(sender, message.payload));
+
+    case MSG.MODEL_DOWNLOAD_START:
+      return respond(startModelDownload());
+
+    case MSG.MODEL_DOWNLOAD_STATUS:
+      return respond(modelManager.getModelState());
+
+    case MSG.MODEL_RESET:
+      return respond(resetModel());
+
+    case MSG.ANALYZE_IMAGE:
+      return respond(analyzeByUrl(message.payload, sender));
+
+    case MSG.ANALYZE_IMAGE_BYTES:
+      return respond(analyzeByBytes(message.payload));
+
+    default:
+      return false;
+  }
 });
+
+/* --------------------------------- analysis --------------------------------- */
+
+async function analyzeByUrl(payload, sender) {
+  const { url, minSize } = payload ?? {};
+  if (!url || typeof url !== 'string') {
+    throw Object.assign(new Error('url required'), { code: 'BAD_INPUT' });
+  }
+
+  const settings = await loadSettings();
+  const host = sender?.url ? safeHostname(sender.url) : null;
+  if (host && !(await isSiteEnabled(host))) {
+    return { skipped: true, reason: 'site-disabled' };
+  }
+
+  if (url.startsWith('data:') || url.startsWith('blob:')) {
+    return { skipped: true, reason: 'bytes-required' };
+  }
+
+  const bytes = await fetchImageBytes(url);
+  return await analyzeBytes(bytes, url, minSize ?? settings.minImageSize);
+}
+
+async function analyzeByBytes(payload) {
+  const { bytes, minSize } = payload ?? {};
+  const buffer = normalizeBytes(bytes);
+  if (!buffer) throw Object.assign(new Error('bytes required'), { code: 'BAD_INPUT' });
+  const settings = await loadSettings();
+  return await analyzeBytes(buffer, null, minSize ?? settings.minImageSize);
+}
+
+function normalizeBytes(bytes) {
+  if (bytes instanceof ArrayBuffer) return bytes;
+  if (bytes?.data && Array.isArray(bytes.data)) return Uint8Array.from(bytes.data).buffer;
+  return null;
+}
+
+function safeHostname(url) {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return null;
+  }
+}
+
+async function analyzeBytes(bytes, sourceUrl, minSize) {
+  const key = await imageContentKey(bytes);
+  const hit = analysisCache.get(key);
+  if (hit) return { ...hit, cached: true };
+
+  await ensureInferenceReady();
+  const response = await sendRequest(
+    {
+      id: `analyze-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
+      type: MSG.OFFSCREEN_ANALYZE,
+      target: 'offscreen',
+      payload: { contentHash: key, bytes, minSize },
+    },
+    { timeoutMs: 120000 },
+  );
+  if (!response?.ok) {
+    throw Object.assign(new Error(response?.error?.message ?? 'analysis failed'), {
+      code: response?.error?.code,
+    });
+  }
+  const result = { ...response.result, sourceUrl: sourceUrl ?? null };
+  analysisCache.set(key, result);
+  return result;
+}
+
+/* ---------------------------------- status ---------------------------------- */
+
+function getTabStats(_tabId) {
+  // Phase 3 wires per-tab counters from content scripts.
+  return { ai: 0, real: 0, uncertain: 0, error: 0, analyzed: 0 };
+}
+
+async function getStatus() {
+  const model = await modelManager.getModelState();
+  return {
+    model,
+    ready: await modelManager.isModelReady(),
+    cacheSize: analysisCache.size,
+  };
+}
+
+async function setSiteEnabledFor(sender, payload) {
+  const host = payload?.hostname ?? (sender?.url ? safeHostname(sender.url) : null);
+  if (!host) throw Object.assign(new Error('hostname required'), { code: 'BAD_INPUT' });
+  return await setSiteEnabled(host, Boolean(payload?.enabled));
+}
+
+async function startModelDownload() {
+  const manifest = await modelManager.loadManifest();
+  const variant = modelManager.pickVariant(manifest, 'wasm'); // safe default; EP re-selected at inference
+  return await modelManager.downloadVariant(variant);
+}
+
+async function resetModel() {
+  const { clearModelStore } = await import('../shared/model-store.js');
+  await clearModelStore();
+  await chrome.storage.local.set({
+    [STORAGE_KEYS.MODEL_STATE]: { status: 'missing', progress: 0, error: null },
+  });
+  return { reset: true };
+}

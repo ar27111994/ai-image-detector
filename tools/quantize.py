@@ -12,7 +12,10 @@ from pathlib import Path
 
 import numpy as np
 
-VALIDATION_TOLERANCE_LOGITS = 0.15  # int8/fp16 logit drift budget vs fp32 ONNX
+VALIDATION_TOLERANCE_LOGITS = 0.02  # max acceptable softmax-probability drift vs fp32 ONNX.
+# NOTE: int8 dynamic quantization CORRUPTS CLIP-family models (observed Δp≈0.29 on random
+# probes — activations overflow int8 range). fp16 preserves them (Δ≈0). For ViT/CLIP/SigLIP
+# we therefore ship fp16 (WebGPU) + fp32 (WASM fallback), not int8.
 
 
 def main() -> int:
@@ -52,12 +55,22 @@ def main() -> int:
 
     int8_path = src.with_name(f"{tag}-int8.onnx")
     print(f"[quantize] int8 dynamic -> {int8_path.name}")
+    # Exclude Conv nodes: ORT's CPU/WASM EPs lack ConvInteger kernels, so the patch-embedding
+    # conv must stay fp32 (QDQ around it would emit ConvInteger and fail at session creation).
+    import onnx
+
+    model = onnx.load(str(src))
+    conv_names = [
+        n.name for n in model.graph.node if n.op_type in ("Conv", "ConvInteger") and n.name
+    ]
+    print(f"[quantize] leaving {len(conv_names)} Conv nodes in fp32")
     quantize_dynamic(
         str(src),
         str(int8_path),
         weight_type=QuantType.QInt8,
         per_channel=True,
         reduce_range=False,
+        nodes_to_exclude=conv_names,
     )
     drift = validate(int8_path)
     size_mb = int8_path.stat().st_size / 1e6

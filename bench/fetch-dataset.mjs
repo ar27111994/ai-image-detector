@@ -201,8 +201,11 @@ async function sampleHfDataset({
         const { label, generator, type } = mapped;
         if (labelCounts[label] >= wanted[label]) continue;
         if (SKIP_ROW_TYPES.has(String(type).toLowerCase())) continue;
+        // Reals come from few "sources" (laion/pexels/imagenet) — a fake-oriented cap would
+        // starve them. Cap fake generators tightly for diversity; real sources loosely.
+        const cap = label === 'fake' ? perGeneratorCap : Math.max(60, perGeneratorCap * 3);
         const gCount = generatorCounts.get(generator) ?? 0;
-        if (gCount >= perGeneratorCap) continue;
+        if (gCount >= cap) continue;
         const img = row.image;
         if (!img?.src) continue;
 

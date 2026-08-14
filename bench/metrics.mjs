@@ -15,13 +15,17 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 
 function parseArgs(argv) {
   const args = { results: null, threshold: 0.65, ensemble: false, sweep: false };
+  const flags = new Set(['ensemble', 'sweep']);
   for (let i = 2; i < argv.length; i++) {
-    const [key, value] = argv[i].replace(/^--/, '').split('=');
-    if (key === 'ensemble' || key === 'sweep') {
+    const token = argv[i].replace(/^--/, '');
+    const eq = token.indexOf('=');
+    const key = eq >= 0 ? token.slice(0, eq) : token;
+    if (flags.has(key)) {
       args[key] = true;
-    } else if (key in args) {
-      args[key] = key === 'threshold' ? Number(value) : value;
+      continue;
     }
+    const value = eq >= 0 ? token.slice(eq + 1) : argv[++i];
+    if (key in args) args[key] = key === 'threshold' ? Number(value) : value;
   }
   if (!args.results) throw new Error('--results <file.jsonl[,file2.jsonl,...]> is required');
   return args;

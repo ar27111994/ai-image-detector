@@ -49,6 +49,21 @@ export async function resolveModel(nameOrPath) {
     };
   }
 
+  // Registry entries may point at a local file (self-converted models) instead of a URL.
+  if (spec.path) {
+    const file = path.join(repoRoot, spec.path);
+    await stat(file);
+    if (spec.sha256) {
+      const actual = await sha256File(file);
+      if (actual !== spec.sha256) {
+        throw new Error(
+          `SHA-256 mismatch for ${nameOrPath}: expected ${spec.sha256}, got ${actual}`,
+        );
+      }
+    }
+    return { name: nameOrPath, file, spec };
+  }
+
   const url = new URL(spec.url);
   const fileName = `${nameOrPath}-${path.basename(url.pathname)}`;
   const file = path.join(CACHE_DIR, fileName);
