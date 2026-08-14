@@ -2,11 +2,9 @@
  * Pack the built extension (dist/) into a versioned zip for distribution / submission.
  * Usage: npm run build && npm run pack
  */
-import { createWriteStream } from 'node:fs';
-import { mkdir, readFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readdir } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 

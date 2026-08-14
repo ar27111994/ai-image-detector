@@ -50,6 +50,7 @@ export default [
         DecompressionStream: 'readonly',
         WritableStream: 'readonly',
         ReadableStream: 'readonly',
+        CompressionStream: 'readonly',
         performance: 'readonly',
         ImageData: 'readonly',
         OffscreenCanvas: 'readonly',
@@ -134,6 +135,8 @@ export default [
         location: 'readonly',
         setTimeout: 'readonly',
         clearTimeout: 'readonly',
+        URL: 'readonly',
+        CompressionStream: 'readonly',
       },
     },
     rules: {

@@ -145,10 +145,7 @@ function pump() {
 
 async function analyze({ el, url }) {
   try {
-    const response = await sendRequest(
-      makeRequest(MSG.ANALYZE_IMAGE, { url, minSize: settings.minImageSize }, null),
-      { timeoutMs: 120000 },
-    );
+    const response = await analyzeOne(el, url);
     if (!response?.ok) {
       showResult(el, {
         verdict: VERDICT.ERROR,
@@ -169,6 +166,44 @@ async function analyze({ el, url }) {
       score: null,
       reasons: [String(err?.message ?? err)],
     });
+  }
+}
+
+/**
+ * Route one image to the right analysis path. blob:/data: URLs cannot be fetched from the
+ * service worker (blob: is scoped to the creating document), so we read the bytes in the page
+ * context and relay them via ANALYZE_IMAGE_BYTES.
+ */
+async function analyzeOne(el, url) {
+  if (url.startsWith('blob:') || url.startsWith('data:')) {
+    const bytes = await readElementBytes(el, url);
+    if (!bytes) {
+      return { ok: true, result: { skipped: true, reason: 'bytes-unavailable' } };
+    }
+    return await sendRequest(
+      makeRequest(MSG.ANALYZE_IMAGE_BYTES, { bytes, minSize: settings.minImageSize }, null),
+      { timeoutMs: 120000 },
+    );
+  }
+  return await sendRequest(
+    makeRequest(MSG.ANALYZE_IMAGE, { url, minSize: settings.minImageSize }, null),
+    { timeoutMs: 120000 },
+  );
+}
+
+/**
+ * Read an image's bytes in the page context (blob:/data: URLs are same-document reachable).
+ * Returns a plain { data: number[] } (structured-clone safe) or null on failure.
+ */
+async function readElementBytes(el, url) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const buf = await res.arrayBuffer();
+    if (buf.byteLength === 0 || buf.byteLength > 32 * 1024 * 1024) return null;
+    return { data: Array.from(new Uint8Array(buf)) };
+  } catch {
+    return null;
   }
 }
 

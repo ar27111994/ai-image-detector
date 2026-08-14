@@ -118,16 +118,20 @@ function observeElement(el, host) {
   badgeHosts.set(el, host);
   if (observed.has(el)) return;
   observed.add(el);
-  // Reposition on scroll/resize (rAF-throttled) and drop if the element leaves the DOM.
-  const reposition = () => {
+  const ro = new ResizeObserver(reposition);
+  function reposition() {
     if (!el.isConnected) {
-      host.remove();
-      badgeHosts.delete(el);
+      teardown();
       return;
     }
     positionHost(host, el);
-  };
-  const ro = new ResizeObserver(reposition);
+  }
+  function teardown() {
+    host.remove();
+    badgeHosts.delete(el);
+    ro.disconnect();
+    window.removeEventListener('scroll', reposition, { capture: true });
+  }
   ro.observe(el);
   window.addEventListener('scroll', reposition, { passive: true, capture: true });
 }
