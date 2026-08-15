@@ -6,7 +6,7 @@
  *   node build.mjs --debug    non-minified with inline sourcemaps
  */
 import { build, context } from 'esbuild';
-import { copyFile, cp, mkdir, readdir, rm, stat } from 'node:fs/promises';
+import { copyFile, cp, mkdir, readdir, readFile, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -17,6 +17,28 @@ const ortDistDir = path.join(repoRoot, 'node_modules', 'onnxruntime-web', 'dist'
 
 const isWatch = process.argv.includes('--watch');
 const isDebug = process.argv.includes('--debug');
+
+/**
+ * The vendored ORT wasm/mjs assets are version-locked to the onnxruntime-web JS bundle (minified
+ * internal names change per release). Fail the build loudly if the installed onnxruntime-web and
+ * onnxruntime-node versions drift apart or the expected wasm files are absent — this is the
+ * invariant Dependabot's ORT auto-merge relies on.
+ */
+async function verifyOrtVersionCoupling() {
+  const readPkg = async (name) =>
+    JSON.parse(await readFile(path.join(repoRoot, 'node_modules', name, 'package.json'), 'utf8'));
+  const web = await readPkg('onnxruntime-web');
+  const node = await readPkg('onnxruntime-node');
+  if (web.version !== node.version) {
+    throw new Error(
+      `onnxruntime version mismatch: web=${web.version} node=${node.version}. ` +
+        'They must be pinned to the same version (see docs/ARCHITECTURE.md).',
+    );
+  }
+  for (const file of ORT_ASSETS) {
+    await stat(path.join(ortDistDir, file)); // throws if a bump renamed/removed a vendored asset
+  }
+}
 
 /** ORT runtime assets vendored into the extension (see docs/ARCHITECTURE.md). */
 const ORT_ASSETS = [
@@ -50,6 +72,7 @@ async function copyStatic() {
     await stat(src); // throws with a clear error if the pinned ORT version renamed files
     await copyFile(src, path.join(vendorDir, file));
   }
+  await verifyOrtVersionCoupling();
 
   // Model manifest (URLs + SHA-256 of weights; weights themselves download at first-run setup)
   const modelsManifest = path.join(repoRoot, 'models', 'manifest.json');

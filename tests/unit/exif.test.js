@@ -80,4 +80,31 @@ describe('exif.analyzeExif', () => {
     expect(out.hasCameraFields).toBe(false);
     expect(out.aiSignals).toEqual([]);
   });
+
+  it('handles a JPEG whose EXIF APP1 is corrupt (exifr throws) without crashing', async () => {
+    // APP1 with "Exif\0\0" prefix but truncated TIFF (exifr will fail to parse).
+    const enc = new TextEncoder();
+    const payload = new Uint8Array([...enc.encode('Exif\0\0'), 0xff, 0xff]);
+    const segLen = payload.length + 2;
+    const jpeg = new Uint8Array([
+      0xff,
+      0xd8,
+      0xff,
+      0xe1,
+      (segLen >>> 8) & 0xff,
+      segLen & 0xff,
+      ...payload,
+      0xff,
+      0xd9,
+    ]).buffer;
+    const out = await analyzeExif(jpeg, 'jpeg');
+    expect(out.aiSignals).toEqual([]);
+    expect([null, false]).toContain(out.hasCameraFields);
+  });
+
+  it('detects AI generator in EXIF Software tag (generic, not just Midjourney)', async () => {
+    const jpeg = jpegWithExifSoftware('Stable Diffusion');
+    const out = await analyzeExif(jpeg, 'jpeg');
+    expect(out.aiSignals.join(' ')).toMatch(/stable diffusion/i);
+  });
 });

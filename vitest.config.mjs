@@ -8,16 +8,16 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'html', 'lcov'],
       reportsDirectory: 'coverage',
-      // Coverage is scoped to the pure, platform-independent logic. Browser-extension runtime
-      // glue (service-worker.js, offscreen.js, inference-engine.js, model-manager.js) is covered
-      // by the e2e suite in real Chrome, which is the only faithful environment for it.
-      include: ['src/shared/**/*.js'],
+      // Coverage is scoped to the pure, platform-independent logic plus the model manager
+      // (heavily unit-tested). The service worker router / offscreen inference engine / content
+      // script are covered by the integration (mock-chrome) and e2e suites in real Chrome.
+      include: ['src/shared/**/*.js', 'src/background/model-manager.js'],
       exclude: ['src/**/vendor/**'],
       thresholds: {
-        lines: 85,
-        functions: 85,
-        branches: 80,
-        statements: 85,
+        lines: 90,
+        functions: 90,
+        branches: 90,
+        statements: 90,
       },
     },
     testTimeout: 30000,

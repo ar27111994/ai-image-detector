@@ -13,13 +13,15 @@
 
 ## Test counts
 
-157 tests across 18 files (unit + integration), plus 6 e2e cases in real Chrome.
+177 tests across 19 files (unit + integration), plus 6 e2e cases in real Chrome.
 
 ## Coverage policy
 
-Shared pure logic (`src/shared/**`) targets ~100% line coverage; the vitest config enforces an
-85% floor. Runtime glue (SW/offscreen/content/popup/options/onboarding) is covered by the
-integration router tests and the e2e suite — the only faithful environments for those APIs.
+Coverage targets the pure, platform-independent logic (`src/shared/**`) plus the model manager
+(`src/background/model-manager.js`). The vitest config enforces a **90% floor on lines, branches,
+functions, and statements** (currently ~97% lines / 90% branches / 93% functions). Runtime glue
+(SW router, offscreen inference engine, content script, pages) is covered by the integration
+(mock-chrome) and e2e suites — the only faithful environments for those APIs.
 
 ## CI gates
 

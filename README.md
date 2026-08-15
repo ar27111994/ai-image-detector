@@ -1,5 +1,15 @@
 # AI Image Detector — Local & Private
 
+[![CI](https://github.com/ar27111994/ai-image-detector/actions/workflows/ci.yml/badge.svg?branch=gsd%2Fm1-ai-image-detector)](https://github.com/ar27111994/ai-image-detector/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/ar27111994/ai-image-detector?include_prereleases)](https://github.com/ar27111994/ai-image-detector/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Model: Apache-2.0](https://img.shields.io/badge/model%20license-Apache--2.0-green)](docs/MODEL.md)
+[![Chrome MV3](https://img.shields.io/badge/Chrome-Manifest%20V3-4285F4?logo=googlechrome&logoColor=white)](https://developer.chrome.com/docs/extensions/mv3/intro/)
+[![ONNX Runtime Web](https://img.shields.io/badge/inference-ONNX%20Runtime%20Web-005CED)](https://onnxruntime.ai/docs/tutorials/web/)
+[![Balanced accuracy: 84.5%](https://img.shields.io/badge/balanced%20accuracy-84.5%25-success)](docs/BENCHMARK.md)
+[![100% offline inference](https://img.shields.io/badge/inference-100%25%20offline-brightgreen)](docs/ARCHITECTURE.md)
+[![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-model%20sources-yellow)](https://huggingface.co/haywoodsloan/ai-image-detector-dev-deploy)
+
 A Chrome extension (Manifest V3) that detects AI-generated images on any webpage with **100%
 in-browser inference**. No cloud. No uploads. No tracking. Every image is analyzed entirely on
 your device.
@@ -54,9 +64,15 @@ Then load the extension:
 
 ### From a release zip
 
-Download the latest `ai-image-detector-*.zip` from
-[Releases](https://github.com/ar27111994/ai-image-detector/releases), unzip, and load it as
-above (choose the unzipped folder).
+Download from [Releases](https://github.com/ar27111994/ai-image-detector/releases), unzip, and
+load it as above (choose the unzipped folder). Two variants are published per release:
+
+- **`ai-image-detector-<v>.zip`** (lean, ~8MB) — downloads the model once at setup.
+- **`ai-image-detector-<v>-bundled.zip`** (self-contained) — model embedded, installs with **zero
+  download** and works offline immediately.
+
+The raw model (`.onnx`) is also attached to every release, so each release is fully
+self-contained. All variants verify the model's SHA-256 against the bundled manifest before use.
 
 ## Usage
 
@@ -106,6 +122,18 @@ test, package, and publish the zip on `v*` tags.
 
 Docs: [Architecture](docs/ARCHITECTURE.md) · [Model provenance](docs/MODEL.md) ·
 [Benchmark](docs/BENCHMARK.md) · [Testing](docs/TESTING.md) · [Changelog](CHANGELOG.md)
+
+## Privacy & security
+
+This extension is privacy-first: after a one-time model download (or zero download with the
+bundled zip), it runs entirely offline and never sends image data anywhere. See
+[PRIVACY.md](PRIVACY.md) for the full policy and [SECURITY.md](SECURITY.md) for the security
+model and how to report a vulnerability.
+
+## Contributing
+
+Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for setup, the CI gates every PR
+must pass, and conventions.
 
 ## License
 

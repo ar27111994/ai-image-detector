@@ -89,6 +89,53 @@ describe('forensic-extractor', () => {
     expect(clean.features.hasCameraExif).toBeNull();
   });
 
+  it('survives a PNG whose text chunk parse throws (zlib bomb guard path)', async () => {
+    // iTXt with compression flag set but garbage compressed data -> inflate throws -> caught.
+    const sig = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+    const enc = new TextEncoder();
+    const itxt = [...enc.encode('prompt'), 0, 1, 0, 0, 0, 0xff, 0xff, 0xff]; // flag=1, garbage
+    const len = itxt.length;
+    const chunk = [
+      (len >>> 24) & 0xff,
+      (len >>> 16) & 0xff,
+      (len >>> 8) & 0xff,
+      len & 0xff,
+      ...enc.encode('iTXt'),
+      ...itxt,
+      0,
+      0,
+      0,
+      0,
+    ];
+    const iend = [0, 0, 0, 0, ...enc.encode('IEND'), 0, 0, 0, 0];
+    const png = new Uint8Array([...sig, ...chunk, ...iend]).buffer;
+    const out = await extractForensicSignals(png);
+    expect(out.format).toBe('png');
+    expect(out.definitive).toBe(false);
+  });
+
+  it('handles a WebP with no metadata chunks (non-definitive)', async () => {
+    // RIFF + WEBP + a single VP8 chunk (no EXIF/XMP/C2PA)
+    const webp = new Uint8Array([
+      0x52, 0x49, 0x46, 0x46, 0x0e, 0, 0, 0, 0x57, 0x45, 0x42, 0x50, 0x56, 0x50, 0x38, 0x20, 0x02,
+      0, 0, 0, 0x01, 0x02,
+    ]).buffer;
+    const out = await extractForensicSignals(webp);
+    expect(out.format).toBe('webp');
+    expect(out.definitive).toBe(false);
+    expect(out.score).toBeNull();
+  });
+
+  it('returns unknown format and no definitive for an unsupported container', async () => {
+    // A truncated GIF header (only 6 bytes) is below the 12-byte minimum for GIF detection,
+    // so it is correctly classified 'unknown'. Either way it must be non-definitive.
+    const gif = new TextEncoder().encode('GIF89a').buffer;
+    const out = await extractForensicSignals(gif);
+    expect(['gif', 'unknown']).toContain(out.format);
+    expect(out.definitive).toBe(false);
+    expect(out.score).toBeNull();
+  });
+
   it('detects a C2PA-bearing PNG as definitive', async () => {
     const enc = new TextEncoder();
     const uuid = [

@@ -38,8 +38,32 @@ python tools/quantize.py --in models-cache/haywoodsloan-fp32-slim.onnx --tag hay
 ```
 
 Each step validates against the PyTorch reference (max |Δlogit| < 1e-3 fp32; softmax drift
-budget for quantized variants). The shipped artifact's SHA-256 is pinned in
-`models/manifest.json` and verified by the extension before first use.
+budget for quantized variants).
+
+## Publishing / updating the model
+
+`tools/publish_models.mjs` uploads weight artifacts to a GitHub Release and **merges the pinned
+URL + SHA-256 + size into `models/manifest.json`** automatically (no manual hash copying):
+
+```bash
+node tools/publish_models.mjs --tag models-v1 --asset primary-int8=models-cache/haywoodsloan-int8.onnx
+```
+
+To change or add a model: convert + quantize it, add/update its entry in `models/manifest.json`
+(key, inputSize, mean/std, outputType, aiLogitIndex, labels, license), run publish, commit the
+updated manifest. The extension reads only the bundled manifest, and the mandatory SHA-256 check
+guarantees the downloaded/bundled bytes match the committed pin.
+
+## Distribution (release workflow)
+
+Every `v*` tag builds, tests, and publishes three artifacts (`.github/workflows/release.yml`):
+
+- `ai-image-detector-<v>.zip` — lean; model downloads once at first-run setup.
+- `ai-image-detector-<v>-bundled.zip` — self-contained; the pinned model is embedded and the
+  extension loads it with zero download (`model-manager.loadBundledVariant`).
+- `<model-key>.onnx` — the raw weight file for that release.
+
+All three verify the model's SHA-256 against `models/manifest.json` before use.
 
 ## What we did NOT ship and why
 

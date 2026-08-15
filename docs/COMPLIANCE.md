@@ -4,16 +4,16 @@ Every rule mapped to evidence in this repository.
 
 ## Hard requirements
 
-| Rule                                            | Status | Evidence                                                                                                                                                    |
-| ----------------------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Fully open source under MIT                     | ✅     | [LICENSE](../LICENSE) (MIT). Bundled model is Apache-2.0 (compatible); see docs/MODEL.md.                                                                   |
-| Native Manifest V3 extension                    | ✅     | [extension/manifest.json](../extension/manifest.json) — `manifest_version: 3`, service worker, offscreen document.                                          |
-| All inference local (WebGPU/WASM/WebGL)         | ✅     | `src/offscreen/inference-engine.js` — ONNX Runtime Web, vendored. No remote inference anywhere.                                                             |
-| One-time weight download at setup, then offline | ✅     | `src/background/model-manager.js` downloads once, SHA-256 verifies, stores in IndexedDB; `ensureModel` short-circuits when ready. No other model downloads. |
-| Automatically analyze images on ordinary pages  | ✅     | `src/content/discovery.js` + MutationObserver/IntersectionObserver.                                                                                         |
-| Confidence score for every analyzed image       | ✅     | `src/content/badges.js` renders a per-image score badge.                                                                                                    |
-| Complete build & installation instructions      | ✅     | [README.md](../README.md) — `npm ci && npm run build`, Load unpacked.                                                                                       |
-| Fully reproducible from source                  | ✅     | Pinned `package-lock.json`; model conversion in `tools/` (tools/README.md, docs/MODEL.md); benchmark in docs/BENCHMARK.md.                                  |
+| Rule                                            | Status | Evidence                                                                                                                                                                                    |
+| ----------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Fully open source under MIT                     | ✅     | [LICENSE](../LICENSE) (MIT). Bundled model is Apache-2.0 (compatible); see docs/MODEL.md.                                                                                                   |
+| Native Manifest V3 extension                    | ✅     | [extension/manifest.json](../extension/manifest.json) — `manifest_version: 3`, service worker, offscreen document.                                                                          |
+| All inference local (WebGPU/WASM/WebGL)         | ✅     | `src/offscreen/inference-engine.js` — ONNX Runtime Web, vendored. No remote inference anywhere.                                                                                             |
+| One-time weight download at setup, then offline | ✅     | `src/background/model-manager.js` downloads once (mandatory SHA-256), stores in IndexedDB; `ensureModel` short-circuits when ready and prefers a bundled copy (zero download) when present. |
+| Automatically analyze images on ordinary pages  | ✅     | `src/content/discovery.js` + MutationObserver/IntersectionObserver.                                                                                                                         |
+| Confidence score for every analyzed image       | ✅     | `src/content/badges.js` renders a per-image score badge.                                                                                                                                    |
+| Complete build & installation instructions      | ✅     | [README.md](../README.md) — `npm ci && npm run build`, Load unpacked.                                                                                                                       |
+| Fully reproducible from source                  | ✅     | Pinned `package-lock.json`; model conversion in `tools/` (tools/README.md, docs/MODEL.md); benchmark in docs/BENCHMARK.md.                                                                  |
 
 ## Prohibited behaviors
 
