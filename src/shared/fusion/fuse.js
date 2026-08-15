@@ -20,7 +20,8 @@ const DEFAULT_THRESHOLD = 0.65;
  * Falls back to identity when calibration is disabled/invalid.
  */
 export function calibrate(neuralScore, cal = CALIBRATION) {
-  const s = clamp01(neuralScore);
+  // Guard against non-finite/NaN scores from a hostile or broken model — clamp to [0,1].
+  const s = Number.isFinite(neuralScore) ? clamp01(neuralScore) : 0.5;
   if (!cal?.enabled || typeof cal.a !== 'number' || typeof cal.b !== 'number') return s;
   const logit = Math.log((s + 1e-9) / (1 - s + 1e-9));
   return clamp01(1 / (1 + Math.exp(-(cal.a * logit + cal.b))));

@@ -83,8 +83,10 @@ export function rgbaToChwTensor(
   { mean = IMAGENET_MEAN, std = IMAGENET_STD } = {},
 ) {
   const pixels = width * height;
-  if (rgba.length !== pixels * 4) {
-    throw new RangeError(`rgbaToChwTensor: expected ${pixels * 4} bytes, got ${rgba.length}`);
+  if (pixels <= 0 || rgba.length !== pixels * 4) {
+    throw new RangeError(
+      `rgbaToChwTensor: expected ${pixels * 4} bytes for ${width}x${height}, got ${rgba.length}`,
+    );
   }
   const data = new Float32Array(3 * pixels);
   const planeG = pixels;
