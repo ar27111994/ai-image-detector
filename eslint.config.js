@@ -119,6 +119,7 @@ export default [
         beforeEach: 'readonly',
         afterEach: 'readonly',
         vi: 'readonly',
+        chrome: 'readonly',
       },
     },
   },

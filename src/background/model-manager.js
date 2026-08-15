@@ -154,11 +154,47 @@ export async function loadVariantBlob(key) {
   return blob;
 }
 
-/** Full setup: ensure the variant for `epPreference` is downloaded and verified. */
+/**
+ * Try to load a model variant that was bundled into the extension package itself
+ * (dist/models/<key>.onnx). Returns the verified Blob, or null when the package has no bundle.
+ * Bundled copies are integrity-checked against the manifest pin exactly like downloads.
+ */
+export async function loadBundledVariant(variant) {
+  const url = chrome.runtime.getURL(`models/${variant.key}.onnx`);
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    if (variant.sizeBytes && blob.size !== variant.sizeBytes) return null;
+    const actual = await sha256Hex(blob);
+    if (variant.sha256 && actual.toLowerCase() !== variant.sha256.toLowerCase()) return null;
+    return blob;
+  } catch {
+    return null; // no bundled model in this package
+  }
+}
+
+/** Full setup: prefer a bundled copy (zero download); else download once and verify. */
 export async function ensureModel(epPreference, onProgress) {
   if (await isModelReady()) return { alreadyReady: true };
   const manifest = await loadManifest();
   const variant = pickVariant(manifest, epPreference);
+
+  // Self-contained package: load the embedded model without any network call.
+  const bundled = await loadBundledVariant(variant);
+  if (bundled) {
+    await putModelBlob(variant.key, bundled);
+    const state = await setModelState({
+      status: 'ready',
+      progress: 1,
+      downloadedBytes: bundled.size,
+      error: null,
+      variant: variant.key,
+    });
+    onProgress?.(state);
+    return { key: variant.key, bytes: bundled.size, bundled: true, verified: true };
+  }
+
   return await downloadVariant(variant, onProgress);
 }
 

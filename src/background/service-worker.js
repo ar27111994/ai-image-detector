@@ -341,9 +341,8 @@ async function setSiteEnabledFor(sender, payload) {
 }
 
 async function startModelDownload() {
-  const manifest = await modelManager.loadManifest();
-  const variant = modelManager.pickVariant(manifest, 'wasm'); // safe default; EP re-selected at inference
-  return await modelManager.downloadVariant(variant);
+  // ensureModel prefers a bundled copy (zero download) and falls back to a verified download.
+  return await modelManager.ensureModel('wasm'); // safe default; EP re-selected at inference
 }
 
 async function resetModel() {

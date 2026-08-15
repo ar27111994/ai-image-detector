@@ -82,21 +82,39 @@ async function main() {
     variants.push({ name, file: path.basename(file), sha256, sizeBytes: stat.size });
   }
 
-  // Emit a manifest fragment (the full manifest.json is curated in the repo; this fills hashes).
+  // Emit a manifest fragment AND merge url/sha256/sizeBytes into models/manifest.json so the
+  // committed manifest always matches the published assets (no manual step, no stale pins).
   const fragment = variants.map((v) => ({
     key: v.name,
     url: `https://github.com/${repo}/releases/download/${args.tag}/${v.file}`,
     sha256: v.sha256,
     sizeBytes: v.sizeBytes,
   }));
-  console.log('\n[publish] manifest fragment (merge into models/manifest.json):');
-  console.log(JSON.stringify(fragment, null, 2));
-  await writeFile(
-    path.join(repoRoot, 'models', 'published-fragment.json'),
-    JSON.stringify(fragment, null, 2),
-    'utf8',
+
+  const { readFile } = await import('node:fs/promises');
+  const manifestPath = path.join(repoRoot, 'models', 'manifest.json');
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+  manifest.releaseTag = args.tag;
+  let merged = 0;
+  for (const v of fragment) {
+    const existing = manifest.variants.find((x) => x.key === v.key);
+    if (existing) {
+      existing.url = v.url;
+      existing.sha256 = v.sha256;
+      existing.sizeBytes = v.sizeBytes;
+      merged++;
+    } else {
+      console.warn(
+        `[publish] NOTE: variant '${v.key}' not in manifest.json — add its metadata (inputSize/mean/std/labels/license) manually, then re-run to pin.`,
+      );
+    }
+  }
+  await writeFile(manifestPath, JSON.stringify(manifest, null, 2) + '\n', 'utf8');
+  console.log(
+    `[publish] updated models/manifest.json (${merged} variant(s) pinned to tag ${args.tag})`,
   );
-  console.log(`[publish] wrote models/published-fragment.json`);
+  console.log('[publish] fragment (for reference):');
+  console.log(JSON.stringify(fragment, null, 2));
 }
 
 main().catch((err) => {

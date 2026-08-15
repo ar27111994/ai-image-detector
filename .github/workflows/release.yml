@@ -12,9 +12,9 @@ jobs:
     name: Build, test, package, publish
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '24'
           cache: npm
@@ -34,13 +34,17 @@ jobs:
       - name: E2E suite
         run: npm run test:e2e
 
-      - name: Package release zip
-        run: npm run pack
+      - name: Package lean + bundled zips
+        run: npm run pack -- --bundled
 
       - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@fe965f7af51af5f2602596916f38a38df2e33de0 # v3.0.2
         with:
-          files: release/ai-image-detector-*.zip
+          # Lean zip (downloads model once at setup), bundled zip (self-contained, zero
+          # download), and the raw model asset (extracted by pack --bundled into release/).
+          files: |
+            release/ai-image-detector-*.zip
+            release/*.onnx
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
