@@ -24,6 +24,14 @@ npm run build        # produces dist/ (load via chrome://extensions -> Load unpa
 npm run dev          # watch mode
 ```
 
+## Git hooks (installed automatically via `npm ci` → `husky`)
+
+- **`pre-commit`**: `lint-staged` (Prettier + ESLint --fix on staged files) + `docs:check`
+  (fails if auto-synced doc numbers drift).
+- **`pre-push`**: full `npm test` + `npm run test:e2e` (catches regressions before they hit CI).
+
+Bypass only when you must (`git commit --no-verify`), and expect CI to catch it anyway.
+
 ## Before you open a PR — the gates (all must pass)
 
 ```bash
