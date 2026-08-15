@@ -4,8 +4,8 @@
 
 - Milestone: 1 — COMPLETE (v1.0.0), 10 commits on gsd/m1-ai-image-detector, all pushed
 - Last action: code review (2 findings fixed: removed WAR fingerprinting, wired blob:/data:
-byte relay); clean-clone reproducibility verified (npm ci && npm run build && npm test [127]
-&& npm run test:e2e [4/4] all pass on a fresh clone); .gitattributes added for LF normalization.
+  byte relay); clean-clone reproducibility verified (npm ci && npm run build && npm test [127]
+  && npm run test:e2e [4/4] all pass on a fresh clone); .gitattributes added for LF normalization.
 - Accuracy: 84.5% BA @ 0.65 raw / 80.6% augmented — clears 75% bar and 80% internal gate.
 - Model published: GitHub Release models-v1, haywoodsloan-int8.onnx (311MB), SHA-256 pinned.
 - Next (manual, owner): submit claim on poidh.xyz bounty #323 linking the repo.

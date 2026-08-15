@@ -135,7 +135,7 @@ function runWithTimeout(sess, feeds, ms) {
  * @returns {Promise<{ score: number, rawOutput: number[], width: number, height: number, latencyMs: number, ep: string }>}
  */
 export async function analyzeImageBytes(bytes) {
-  if (!session) throw new Error('inference session not initialized');
+  if (!session || !activeSpec) throw new Error('inference session not initialized');
   const t0 = performance.now();
 
   const blob = new Blob([bytes]);
@@ -145,50 +145,56 @@ export async function analyzeImageBytes(bytes) {
   } catch (err) {
     throw new Error(`image decode failed: ${err?.message ?? err}`);
   }
-  const width = bitmap.width;
-  const height = bitmap.height;
 
-  const size = activeSpec.inputSize;
-  const scores = [];
+  try {
+    const width = bitmap.width;
+    const height = bitmap.height;
 
-  // Full-frame view (always).
-  scores.push(await inferView(bitmap, 0, 0, width, height, size));
+    const size = activeSpec.inputSize;
+    const scores = [];
 
-  // Patch grid when the source is large enough that downscaling would dominate.
-  const minDim = Math.min(width, height);
-  if (minDim >= size * 2) {
-    const crop = Math.floor(minDim * 0.5); // 50% crops
-    const halfW = Math.floor((crop * (width / minDim)) / 2) * 2;
-    const halfH = Math.floor((crop * (height / minDim)) / 2) * 2;
-    const offsets = [
-      [0, 0],
-      [width - halfW, 0],
-      [0, height - halfH],
-      [width - halfW, height - halfH],
-      [Math.floor((width - halfW) / 2), Math.floor((height - halfH) / 2)],
-    ];
-    for (const [ox, oy] of offsets) {
-      scores.push(await inferView(bitmap, ox, oy, halfW, halfH, size));
+    // Full-frame view (always).
+    scores.push(await inferView(bitmap, 0, 0, width, height, size));
+
+    // Patch grid when the source is large enough that downscaling would dominate.
+    const minDim = Math.min(width, height);
+    if (minDim >= size * 2) {
+      const crop = Math.floor(minDim * 0.5); // 50% crops
+      const halfW = Math.floor((crop * (width / minDim)) / 2) * 2;
+      const halfH = Math.floor((crop * (height / minDim)) / 2) * 2;
+      const offsets = [
+        [0, 0],
+        [width - halfW, 0],
+        [0, height - halfH],
+        [width - halfW, height - halfH],
+        [Math.floor((width - halfW) / 2), Math.floor((height - halfH) / 2)],
+      ];
+      for (const [ox, oy] of offsets) {
+        scores.push(await inferView(bitmap, ox, oy, halfW, halfH, size));
+      }
     }
-  }
-  bitmap.close();
 
-  const score = scores.reduce((a, b) => a + b, 0) / scores.length;
-  return {
-    score,
-    rawOutput: scores,
-    width,
-    height,
-    latencyMs: Math.round(performance.now() - t0),
-    ep: activeEp,
-    views: scores.length,
-  };
+    const score = scores.reduce((a, b) => a + b, 0) / scores.length;
+    return {
+      score,
+      rawOutput: scores,
+      width,
+      height,
+      latencyMs: Math.round(performance.now() - t0),
+      ep: activeEp,
+      views: scores.length,
+    };
+  } finally {
+    bitmap.close(); // always release GPU memory, even on error
+  }
 }
 
 /** Render one source rect of the bitmap to the model input and run inference. */
 async function inferView(bitmap, sx, sy, sw, sh, size) {
+  if (!session || !activeSpec) throw new Error('inference session not initialized');
   const canvas = new OffscreenCanvas(size, size);
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) throw new Error('failed to acquire 2D canvas context');
   ctx.drawImage(bitmap, sx, sy, sw, sh, 0, 0, size, size);
   const imageData = ctx.getImageData(0, 0, size, size);
   const tensor = preprocessRgba(imageData.data, size, size, activeSpec);

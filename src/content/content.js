@@ -30,17 +30,22 @@ const urlToElements = new Map(); // url -> Set<Element>
 async function init() {
   try {
     const pong = await sendRequest(makeRequest(MSG.PING, {}, null), { timeoutMs: 10000 });
-    if (!pong?.ok) return;
-  } catch {
-    return; // extension context invalidated
+    if (!pong?.ok) {
+      console.debug('[ai-detector] service worker not ready (unexpected ping response)');
+      return;
+    }
+  } catch (err) {
+    // Extension context invalidated (reload/update) or SW not up yet — safe to stay dormant.
+    console.debug('[ai-detector] ping failed:', err?.message ?? err);
+    return;
   }
   document.documentElement.setAttribute('data-ai-detector-connected', 'true');
 
   try {
-    const res = await sendRequest(makeRequest(MSG.GET_SETTINGS, {}, null));
+    const res = await sendRequest(makeRequest(MSG.GET_SETTINGS, {}, null), { timeoutMs: 10000 });
     if (res?.ok && res.result) settings = { ...settings, ...res.result };
-  } catch {
-    /* defaults are fine */
+  } catch (err) {
+    console.debug('[ai-detector] settings load failed, using defaults:', err?.message ?? err);
   }
 
   if (!settings.autoScan) return;

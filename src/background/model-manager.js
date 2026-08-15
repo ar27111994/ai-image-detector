@@ -64,6 +64,12 @@ export async function isModelReady() {
 export async function downloadVariant(variantSpec, onProgress) {
   const { key, url, sha256, sizeBytes } = variantSpec;
   if (!key || !url) throw new Error('variant spec missing key/url');
+  // SHA-256 is mandatory: without it a tampered download would be trusted. Never proceed unsigned.
+  if (!sha256 || typeof sha256 !== 'string' || !/^[0-9a-f]{64}$/i.test(sha256)) {
+    throw Object.assign(new Error('variant spec must include a valid sha256 (64 hex chars)'), {
+      code: 'MISSING_INTEGRITY',
+    });
+  }
 
   await setModelState({
     status: 'downloading',
@@ -111,15 +117,14 @@ export async function downloadVariant(variantSpec, onProgress) {
 
   const blob = new Blob(chunks, { type: 'application/octet-stream' });
 
-  if (sha256) {
-    const actual = await sha256Hex(blob);
-    if (actual !== sha256) {
-      await setModelState({
-        status: 'error',
-        error: 'sha256 mismatch — aborting (possible corruption)',
-      });
-      throw new Error(`model integrity check failed: expected ${sha256}, got ${actual}`);
-    }
+  // Integrity is mandatory (enforced above).
+  const actual = await sha256Hex(blob);
+  if (actual.toLowerCase() !== sha256.toLowerCase()) {
+    await setModelState({
+      status: 'error',
+      error: 'sha256 mismatch — aborting (possible corruption)',
+    });
+    throw new Error(`model integrity check failed: expected ${sha256}, got ${actual}`);
   }
 
   await putModelBlob(key, blob);
@@ -135,7 +140,11 @@ export async function downloadVariant(variantSpec, onProgress) {
 }
 
 function broadcastProgress(state) {
-  chrome.runtime.sendMessage({ type: MSG.MODEL_DOWNLOAD_PROGRESS, payload: state }).catch(() => {});
+  chrome.runtime.sendMessage({ type: MSG.MODEL_DOWNLOAD_PROGRESS, payload: state }).catch((err) =>
+    // No listener is expected unless the onboarding page is open; log at debug so genuine
+    // delivery failures are diagnosable without breaking the download.
+    console.debug('[model-manager] progress broadcast had no receiver:', err?.message ?? err),
+  );
 }
 
 /** Load a model variant blob from IndexedDB (throws if absent). */

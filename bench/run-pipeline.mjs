@@ -155,6 +155,11 @@ async function main() {
   console.log(
     `\nbar: ${pct(0.75)} -> ${m.balancedAccuracy >= 0.75 ? 'PASS' : 'FAIL'}; internal gate 80% -> ${m.balancedAccuracy >= 0.8 ? 'PASS' : 'FAIL'}`,
   );
+  // Enforce the gate: non-zero exit on failure so CI blocks a regression.
+  if (m.balancedAccuracy < 0.75) {
+    console.error(`[pipeline] ACCURACY GATE FAILED: ${pct(m.balancedAccuracy)} < 75.00%`);
+    process.exitCode = 1;
+  }
 }
 
 main().catch((err) => {

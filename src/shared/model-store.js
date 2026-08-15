@@ -6,39 +6,51 @@
  * All subsequent inference loads from IDB — the extension is fully offline afterwards.
  */
 import { MODEL_DB_NAME, MODEL_DB_VERSION, MODEL_STORE } from './constants.js';
+import { withTimeout } from './protocol.js';
+
+/** Bound on every IndexedDB operation so a hung/blocked store can't stall the service worker. */
+const IDB_TIMEOUT_MS = 10000;
 
 /** @returns {Promise<IDBDatabase>} */
 function openDb() {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(MODEL_DB_NAME, MODEL_DB_VERSION);
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains(MODEL_STORE)) {
-        db.createObjectStore(MODEL_STORE);
-      }
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-    req.onblocked = () => reject(new Error('IndexedDB blocked (another tab upgrading?)'));
-  });
+  return withTimeout(
+    new Promise((resolve, reject) => {
+      const req = indexedDB.open(MODEL_DB_NAME, MODEL_DB_VERSION);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(MODEL_STORE)) {
+          db.createObjectStore(MODEL_STORE);
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+      req.onblocked = () => reject(new Error('IndexedDB blocked (another tab upgrading?)'));
+    }),
+    IDB_TIMEOUT_MS,
+    'indexedDB.open',
+  );
 }
 
 function tx(db, mode, fn) {
-  return new Promise((resolve, reject) => {
-    const t = db.transaction(MODEL_STORE, mode);
-    const store = t.objectStore(MODEL_STORE);
-    const request = fn(store);
-    let requestResult;
-    // Capture the operation's own result (fires before the transaction completes).
-    if (request && typeof request === 'object') {
-      request.onsuccess = () => {
-        requestResult = request.result;
-      };
-    }
-    t.oncomplete = () => resolve(requestResult);
-    t.onerror = () => reject(t.error);
-    t.onabort = () => reject(t.error ?? new Error('transaction aborted'));
-  });
+  return withTimeout(
+    new Promise((resolve, reject) => {
+      const t = db.transaction(MODEL_STORE, mode);
+      const store = t.objectStore(MODEL_STORE);
+      const request = fn(store);
+      let requestResult;
+      // Capture the operation's own result (fires before the transaction completes).
+      if (request && typeof request === 'object') {
+        request.onsuccess = () => {
+          requestResult = request.result;
+        };
+      }
+      t.oncomplete = () => resolve(requestResult);
+      t.onerror = () => reject(t.error);
+      t.onabort = () => reject(t.error ?? new Error('transaction aborted'));
+    }),
+    IDB_TIMEOUT_MS,
+    'indexedDB.transaction',
+  );
 }
 
 /** @param {string} key @param {Blob} blob */

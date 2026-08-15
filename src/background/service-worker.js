@@ -14,14 +14,16 @@ import {
   OFFSCREEN_DOCUMENT_PATH,
   STORAGE_KEYS,
 } from '../shared/constants.js';
-import { isRequest, makeError, makeOk, sendRequest } from '../shared/protocol.js';
+import { isRequest, makeError, makeOk, nextId, sendRequest } from '../shared/protocol.js';
 import { imageContentKey } from '../shared/hash.js';
 import { LruCache } from '../shared/lru-cache.js';
 import * as modelManager from './model-manager.js';
 import { isSiteEnabled, loadSettings, setSiteEnabled } from '../shared/settings.js';
 
 let creatingOffscreen = null;
+let initializingSession = null;
 const analysisCache = new LruCache(ANALYSIS_CACHE_MAX_ENTRIES);
+const inflightAnalysis = new Map(); // contentHash -> Promise<result> (dedup concurrent identical work)
 let cachedManifest = null;
 
 /* ---------------------------------- setup ---------------------------------- */
@@ -42,35 +44,42 @@ chrome.runtime.onStartup.addListener(() => {
 
 /* ----------------------------- offscreen lifecycle ----------------------------- */
 
-/** Create the offscreen document exactly once; concurrent callers share the same promise. */
+/**
+ * Create the offscreen document exactly once; concurrent callers share the same promise.
+ * The check-then-create is made atomic by assigning the in-flight promise synchronously before
+ * the first await, so a second caller always sees `creatingOffscreen` set.
+ */
 async function ensureOffscreenDocument() {
-  const url = chrome.runtime.getURL(OFFSCREEN_DOCUMENT_PATH);
-  const existing = await chrome.runtime.getContexts({
-    contextTypes: ['OFFSCREEN_DOCUMENT'],
-    documentUrls: [url],
-  });
-  if (existing.length > 0) return;
-
   if (creatingOffscreen) {
     await creatingOffscreen;
     return;
   }
-  creatingOffscreen = chrome.offscreen
-    .createDocument({
-      url: OFFSCREEN_DOCUMENT_PATH,
-      reasons: ['BLOBS', 'WORKERS'],
-      justification: 'Run local ONNX image-classification inference and image preprocessing',
-    })
-    .catch((err) => {
-      if (!/already exists/i.test(String(err?.message))) throw err;
-    })
-    .finally(() => {
-      creatingOffscreen = null;
+  creatingOffscreen = (async () => {
+    const url = chrome.runtime.getURL(OFFSCREEN_DOCUMENT_PATH);
+    const existing = await chrome.runtime.getContexts({
+      contextTypes: ['OFFSCREEN_DOCUMENT'],
+      documentUrls: [url],
     });
-  await creatingOffscreen;
+    if (existing.length > 0) return;
+    await chrome.offscreen
+      .createDocument({
+        url: OFFSCREEN_DOCUMENT_PATH,
+        reasons: ['BLOBS', 'WORKERS'],
+        justification: 'Run local ONNX image-classification inference and image preprocessing',
+      })
+      .catch((err) => {
+        // Tolerate a racing create that landed first.
+        if (!/already exists/i.test(String(err?.message))) throw err;
+      });
+  })();
+  try {
+    await creatingOffscreen;
+  } finally {
+    creatingOffscreen = null;
+  }
 }
 
-/** Warm the inference session inside the offscreen document. */
+/** Warm the inference session inside the offscreen document (idempotent; dedupes concurrent calls). */
 async function ensureInferenceReady() {
   if (!(await modelManager.isModelReady())) {
     throw Object.assign(new Error('model not downloaded — complete setup first'), {
@@ -79,21 +88,29 @@ async function ensureInferenceReady() {
   }
   await ensureOffscreenDocument();
   if (!cachedManifest) cachedManifest = await modelManager.loadManifest();
-  const response = await sendRequest(
+
+  if (initializingSession) return await initializingSession;
+  initializingSession = sendRequest(
     {
-      id: `ensure-${Date.now()}`,
+      id: nextId('ensure'),
       type: MSG.OFFSCREEN_ENSURE_READY,
       target: 'offscreen',
       payload: { manifest: cachedManifest },
     },
     { timeoutMs: 180000 },
-  );
-  if (!response?.ok) {
-    throw Object.assign(new Error(response?.error?.message ?? 'offscreen init failed'), {
-      code: response?.error?.code,
+  )
+    .then((response) => {
+      if (!response?.ok) {
+        throw Object.assign(new Error(response?.error?.message ?? 'offscreen init failed'), {
+          code: response?.error?.code,
+        });
+      }
+      return response.result;
+    })
+    .finally(() => {
+      initializingSession = null;
     });
-  }
-  return response.result;
+  return await initializingSession;
 }
 
 /* ------------------------------- image fetching ------------------------------- */
@@ -112,8 +129,32 @@ async function fetchImageBytes(url) {
 
 /* ------------------------------- message routing ------------------------------- */
 
+/**
+ * Only accept messages from this extension's own contexts (content scripts, pages, offscreen).
+ * External pages/other extensions cannot drive analysis or mutate state.
+ */
+function isExtensionContext(sender) {
+  if (!sender) return false;
+  if (sender.id && sender.id !== chrome.runtime.id) return false;
+  const origin = sender.origin ?? sender.url;
+  if (origin && !origin.startsWith(`chrome-extension://${chrome.runtime.id}`) && !sender.tab) {
+    // A sender with a tab is a content script in a web page (allowed); anything else with a
+    // foreign origin and no tab is not ours.
+    return false;
+  }
+  return true;
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!isRequest(message)) return false;
+  if (!isExtensionContext(sender)) {
+    console.warn(
+      '[ai-detector] rejected message from non-extension context:',
+      sender?.origin ?? sender?.url,
+    );
+    sendResponse(makeError(message, 'unauthorized sender', 'FORBIDDEN'));
+    return true;
+  }
 
   const respond = (promise) => {
     promise
@@ -208,24 +249,39 @@ async function analyzeBytes(bytes, sourceUrl, minSize) {
   const hit = analysisCache.get(key);
   if (hit) return { ...hit, cached: true };
 
-  await ensureInferenceReady();
-  const response = await sendRequest(
-    {
-      id: `analyze-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
-      type: MSG.OFFSCREEN_ANALYZE,
-      target: 'offscreen',
-      payload: { contentHash: key, bytes, minSize },
-    },
-    { timeoutMs: 120000 },
-  );
-  if (!response?.ok) {
-    throw Object.assign(new Error(response?.error?.message ?? 'analysis failed'), {
-      code: response?.error?.code,
-    });
+  // Deduplicate concurrent analyses of identical bytes (cache stampede protection).
+  if (inflightAnalysis.has(key)) {
+    const shared = await inflightAnalysis.get(key);
+    return { ...shared, cached: true };
   }
-  const result = { ...response.result, sourceUrl: sourceUrl ?? null };
-  analysisCache.set(key, result);
-  return result;
+
+  const work = (async () => {
+    await ensureInferenceReady();
+    const response = await sendRequest(
+      {
+        id: nextId('analyze'),
+        type: MSG.OFFSCREEN_ANALYZE,
+        target: 'offscreen',
+        payload: { contentHash: key, bytes, minSize },
+      },
+      { timeoutMs: 120000 },
+    );
+    if (!response?.ok) {
+      throw Object.assign(new Error(response?.error?.message ?? 'analysis failed'), {
+        code: response?.error?.code,
+      });
+    }
+    return { ...response.result, sourceUrl: sourceUrl ?? null };
+  })();
+
+  inflightAnalysis.set(key, work);
+  try {
+    const result = await work;
+    analysisCache.set(key, result);
+    return result;
+  } finally {
+    inflightAnalysis.delete(key);
+  }
 }
 
 /* ---------------------------------- status ---------------------------------- */
