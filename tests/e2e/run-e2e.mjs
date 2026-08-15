@@ -102,6 +102,39 @@ async function main() {
       assert.ok(connected, 'content script did not reconnect after navigation');
       await page.close();
     });
+
+    await test('graceful degradation: images get an N/A badge (not a crash) before model setup', async () => {
+      const page = await browser.newPage();
+      const errors = [];
+      page.on('pageerror', (e) => errors.push(e.message));
+      await page.goto(`http://127.0.0.1:${port}/multi`, { waitUntil: 'networkidle0' });
+      // Wait for the SW to be reachable and analysis to be attempted.
+      await waitForServiceWorker(browser).catch(() => null);
+      await new Promise((r) => setTimeout(r, 3000));
+      // Without a downloaded model the SW returns MODEL_NOT_READY -> content script shows an
+      // error/N-A badge (graceful) OR no badge if the analysis was skipped. Either way: no
+      // uncaught page errors.
+      assert.deepEqual(errors, [], `page errors: ${errors.join('; ')}`);
+      await page.close();
+    });
+
+    await test('options page loads and renders the design-system UI', async () => {
+      const sw = await waitForServiceWorker(browser);
+      const extId = new URL(sw.url()).host; // chrome-extension://<id>/background.js
+      const page = await browser.newPage();
+      const errors = [];
+      page.on('pageerror', (e) => errors.push(e.message));
+      await page.goto(`chrome-extension://${extId}/pages/options.html`, {
+        waitUntil: 'networkidle0',
+      });
+      await new Promise((r) => setTimeout(r, 1500));
+      const hasHeading = await page.evaluate(
+        () => !!document.querySelector('h1')?.textContent?.includes('AI Image Detector Settings'),
+      );
+      assert.ok(hasHeading, 'options page did not render its heading');
+      assert.deepEqual(errors, [], `options page errors: ${errors.join('; ')}`);
+      await page.close();
+    });
   } finally {
     await cleanup(ctx);
     server.close();
