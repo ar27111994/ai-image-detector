@@ -23,7 +23,8 @@
     "pack": "node tools/pack.mjs",
     "docs:sync": "node tools/sync-docs.mjs",
     "docs:check": "node tools/sync-docs.mjs --check",
-    "test:e2e": "node tests/e2e/run-e2e.mjs"
+    "test:e2e": "node tests/e2e/run-e2e.mjs",
+    "prepare": "husky"
   },
   "devDependencies": {
     "@eslint/js": "9.33.0",
@@ -31,6 +32,8 @@
     "esbuild": "0.25.8",
     "eslint": "9.33.0",
     "eslint-config-prettier": "10.1.8",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.1.6",
     "onnxruntime-node": "1.22.0",
     "prettier": "3.6.2",
     "puppeteer": "24.16.2",

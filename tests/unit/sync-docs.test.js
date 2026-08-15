@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest';
 const MARKER_RE = /<!--\s*AUTO:([A-Z0-9_]+)\s*-->([\s\S]*?)<!--\s*\/AUTO:\1\s*-->/g;
 
 function applyValues(content, values) {
-  return content.replace(MARKER_RE, (match, key, oldValue) => {
+  return content.replace(MARKER_RE, (match, key, _oldValue) => {
     const value = values[key];
     if (value == null) return match;
     return `<!-- AUTO:${key} -->${value}<!-- /AUTO:${key} -->`;

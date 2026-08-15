@@ -151,10 +151,10 @@ export async function analyzeImageBytes(bytes) {
     const height = bitmap.height;
 
     const size = activeSpec.inputSize;
-    const scores = [];
+    const viewsLogits = [];
 
     // Full-frame view (always).
-    scores.push(await inferView(bitmap, 0, 0, width, height, size));
+    viewsLogits.push(await inferViewLogits(bitmap, 0, 0, width, height, size));
 
     // Patch grid when the source is large enough that downscaling would dominate.
     const minDim = Math.min(width, height);
@@ -170,27 +170,39 @@ export async function analyzeImageBytes(bytes) {
         [Math.floor((width - halfW) / 2), Math.floor((height - halfH) / 2)],
       ];
       for (const [ox, oy] of offsets) {
-        scores.push(await inferView(bitmap, ox, oy, halfW, halfH, size));
+        viewsLogits.push(await inferViewLogits(bitmap, ox, oy, halfW, halfH, size));
       }
     }
 
-    const score = scores.reduce((a, b) => a + b, 0) / scores.length;
+    // Test-time augmentation: average LOGITS across views (not probabilities) — averaging
+    // pre-softmax logits preserves the discriminative signal better than averaging calibrated
+    // probabilities, and is the measured-correct way to do multi-crop TTA.
+    const nViews = viewsLogits.length;
+    const nClasses = viewsLogits[0].length;
+    const meanLogits = new Array(nClasses).fill(0);
+    for (const logits of viewsLogits) {
+      for (let c = 0; c < nClasses; c++) meanLogits[c] += logits[c] / nViews;
+    }
+    const score = scoreFromOutput(meanLogits, activeSpec);
     return {
       score,
-      rawOutput: scores,
+      rawOutput: meanLogits,
       width,
       height,
       latencyMs: Math.round(performance.now() - t0),
       ep: activeEp,
-      views: scores.length,
+      views: nViews,
     };
   } finally {
     bitmap.close(); // always release GPU memory, even on error
   }
 }
 
-/** Render one source rect of the bitmap to the model input and run inference. */
-async function inferView(bitmap, sx, sy, sw, sh, size) {
+/**
+ * Render one source rect of the bitmap to the model input and return raw logits (NOT softmaxed).
+ * Callers average logits across views, then map to a probability once via scoreFromOutput.
+ */
+async function inferViewLogits(bitmap, sx, sy, sw, sh, size) {
   if (!session || !activeSpec) throw new Error('inference session not initialized');
   const canvas = new OffscreenCanvas(size, size);
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
@@ -200,8 +212,7 @@ async function inferView(bitmap, sx, sy, sw, sh, size) {
   const tensor = preprocessRgba(imageData.data, size, size, activeSpec);
   const feeds = { [session.inputNames[0]]: new ort.Tensor('float32', tensor.data, tensor.dims) };
   const results = await session.run(feeds);
-  const output = Array.from(results[session.outputNames[0]].data);
-  return scoreFromOutput(output, activeSpec);
+  return Array.from(results[session.outputNames[0]].data);
 }
 
 /**
