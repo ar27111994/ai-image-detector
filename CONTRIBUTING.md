@@ -30,7 +30,7 @@ npm run dev          # watch mode
 npm run lint           # ESLint (blocks CI)
 npm run format:check   # Prettier (blocks CI)
 npm test               # unit + integration (Vitest)
-npm run cover          # coverage gate on src/shared (>=85%; currently ~96%)
+npm run cover          # coverage gate on src/shared + model-manager (>=90%; currently ~97%)
 npm run test:e2e       # real extension in headless Chrome-for-Testing
 npm run build          # production build
 ```

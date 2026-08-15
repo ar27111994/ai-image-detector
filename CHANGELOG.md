@@ -29,7 +29,7 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ### Testing
 
-- 127 unit tests; shared-module coverage 96.4% lines / 92% functions (gate: 85%).
+- 209 unit + integration tests; coverage gate 90% on lines/branches/functions/statements.
 - E2E suite (4 cases) passes on a clean clone (`npm ci && npm run build && npm run test:e2e`).
 
 ### Notable fixes discovered during development

@@ -2,18 +2,18 @@
 
 ## Layers
 
-| Layer       | Command                                                 | What it covers                                                                                                                                                                            |
-| ----------- | ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Unit        | `npm test`                                              | Pure modules (preprocessing, metrics, RNG, protocol, LRU cache, hashing, settings, container/PNG/XMP/C2PA/EXIF parsers, fusion, spectral) + malformed-input, security, concurrency/stress |
-| Integration | `npm test` (tests/integration)                          | Service-worker message router with a mock chrome runtime: protocol round-trip, sender validation (FORBIDDEN), bad-input and site-disabled paths                                           |
-| Benchmark   | `node bench/run-pipeline.mjs --model haywoodsloan-int8` | Full detection stack over the labeled public benchmark via onnxruntime-node; **exits non-zero below the 75% bar**                                                                         |
-| E2E         | `npm run test:e2e`                                      | Real extension in headless Chrome-for-Testing: SW start, content-script inject, discovery + lazy-load, SPA navigation, graceful degradation pre-setup, options-page render                |
-| Lint/format | `npm run lint` / `npm run format:check`                 | ESLint flat + Prettier (both block CI on failure)                                                                                                                                         |
-| Coverage    | `npm run cover`                                         | v8 coverage on `src/shared/**`, 85% floor (currently ~96% lines)                                                                                                                          |
+| Layer       | Command                                                 | What it covers                                                                                                                                                                                                                               |
+| ----------- | ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Unit        | `npm test`                                              | Pure modules (preprocessing, metrics, RNG, protocol, LRU cache, hashing, settings, container/PNG/XMP/C2PA/EXIF parsers, fusion, spectral, discovery, badges, model-manager, inference score) + malformed-input, security, concurrency/stress |
+| Integration | `npm test` (tests/integration)                          | Service-worker message router with a mock chrome runtime: protocol round-trip, sender validation (FORBIDDEN), bad-input and site-disabled paths                                                                                              |
+| Benchmark   | `node bench/run-pipeline.mjs --model haywoodsloan-int8` | Full detection stack over the labeled public benchmark via onnxruntime-node; **exits non-zero below the 75% bar**                                                                                                                            |
+| E2E         | `npm run test:e2e`                                      | Real extension in headless Chrome-for-Testing: SW start, content-script inject, discovery + lazy-load, SPA navigation, graceful degradation pre-setup, options-page render                                                                   |
+| Lint/format | `npm run lint` / `npm run format:check`                 | ESLint flat + Prettier (both block CI on failure)                                                                                                                                                                                            |
+| Coverage    | `npm run cover`                                         | v8 coverage on `src/shared/**`, 85% floor (currently ~96% lines)                                                                                                                                                                             |
 
 ## Test counts
 
-177 tests across 19 files (unit + integration), plus 6 e2e cases in real Chrome.
+209 tests across 22 files (unit + integration), plus 6 e2e cases in real Chrome.
 
 ## Coverage policy
 
