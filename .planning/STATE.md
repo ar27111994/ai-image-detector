@@ -2,12 +2,19 @@
 
 ## Current Position
 
-- Milestone: 1 — COMPLETE (v1.0.0), 10 commits on gsd/m1-ai-image-detector, all pushed
-- Last action: code review (2 findings fixed: removed WAR fingerprinting, wired blob:/data:
-  byte relay); clean-clone reproducibility verified (npm ci && npm run build && npm test [127]
-  && npm run test:e2e [4/4] all pass on a fresh clone); .gitattributes added for LF normalization.
+- Milestone: 1 — COMPLETE (v1.0.0). Post-release full review + polish pass COMPLETE.
+- 16 commits on gsd/m1-ai-image-detector, all pushed; clean tree.
+- Last action: 3 parallel review agents (frontend/backend/testing) + own read produced 32
+  findings; ALL fixed and committed. Clean-clone reproducibility re-verified
+  (npm ci && npm run build && npm test [157] && npm run test:e2e [6/6] all pass).
 - Accuracy: 84.5% BA @ 0.65 raw / 80.6% augmented — clears 75% bar and 80% internal gate.
-- Model published: GitHub Release models-v1, haywoodsloan-int8.onnx (311MB), SHA-256 pinned.
+- New since review: shared design tokens (tokens.css) across all surfaces; WCAG AA + focus +
+  reduced-motion + live regions; popup per-page stats; options model card + save toasts;
+  onboarding next-steps; accessible badges with click breakdown; hardened backend (atomic
+  offscreen creation, mandatory SHA-256, IDB timeouts, sender validation, inflight dedup,
+  bitmap leak fix); accuracy gate exits non-zero; CI split into quality/test/security/build/e2e +
+  dependabot + release workflow; malformed-input/security/concurrency test suites (157 tests,
+  96.85% shared-module coverage).
 - Next (manual, owner): submit claim on poidh.xyz bounty #323 linking the repo.
 
 ## Environment gotchas (Chrome 139 / puppeteer 24) — see 01-1-SUMMARY.md
