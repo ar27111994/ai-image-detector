@@ -5,10 +5,12 @@
 
 const PNG_MAGIC = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 
+/** Normalize an ArrayBuffer|Uint8Array to a Uint8Array view (no copy when already a view). */
 export function bytesOf(buffer) {
   return buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
 }
 
+/** True if `bytes` starts with `magic` at `offset`. */
 export function hasMagic(bytes, magic, offset = 0) {
   if (bytes.length < offset + magic.length) return false;
   for (let i = 0; i < magic.length; i++) {

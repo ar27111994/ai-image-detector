@@ -73,8 +73,11 @@ export const VERDICT = Object.freeze({
  * With the default threshold of 0.65 the uncertain band is [0.35, 0.65).
  */
 
+/** IndexedDB database holding downloaded model weight blobs. */
 export const MODEL_DB_NAME = 'ai-image-detector-models';
+/** IndexedDB schema version (bump when the object-store layout changes). */
 export const MODEL_DB_VERSION = 1;
+/** Object store name for model blobs inside MODEL_DB_NAME. */
 export const MODEL_STORE = 'models';
 
 /** Offscreen document URL path (relative to extension root). */

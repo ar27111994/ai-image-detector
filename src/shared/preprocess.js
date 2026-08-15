@@ -9,8 +9,9 @@
  *   normalize (x - mean) / std -> CHW float32 planar tensor.
  */
 
-/** ImageNet normalization stats (fallback when a model config does not specify its own). */
+/** ImageNet normalization means (fallback when a model config does not specify its own). */
 export const IMAGENET_MEAN = Object.freeze([0.485, 0.456, 0.406]);
+/** ImageNet normalization standard deviations (paired with IMAGENET_MEAN). */
 export const IMAGENET_STD = Object.freeze([0.229, 0.224, 0.225]);
 
 /**

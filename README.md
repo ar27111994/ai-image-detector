@@ -15,15 +15,19 @@ your machine.
 ## Features
 
 - 🔍 **Automatic detection** — images on any page are analyzed as you browse (including
-  lazy-loaded and dynamically inserted images).
-- 🏷️ **Confidence badges** — every analyzed image gets a color-coded score (red = AI, green =
-  real, amber = uncertain).
-- 🔒 **Private by design** — after a one-time model download at setup, the extension works
-  entirely offline and makes no network requests for inference.
+  lazy-loaded, dynamically inserted, and `blob:`/`data:` images).
+- 🏷️ **Confidence badges** — every analyzed image gets an accessible, color-coded score badge
+  (red = AI, green = real, amber = uncertain). Click or press Enter/Space for a detail breakdown
+  (score, engine, latency, signals).
+- 📊 **Popup stats** — per-page counts (analyzed / AI / real / unclear), a live threshold slider,
+  and a per-site toggle.
+- 🎨 **Shared design system** — one token stylesheet (colors, type, spacing, motion, dark theme)
+  drives every surface; WCAG AA contrast, visible focus, reduced-motion support.
+- 🔒 **Private by design** — after a one-time SHA-256-verified model download at setup, the
+  extension works entirely offline and never uploads image data.
 - ⚡ **Local inference** — ONNX Runtime Web with WebGPU acceleration and a WASM fallback.
-- 🧠 **Hybrid detection** — a neural model plus forensic metadata signals (C2PA provenance,
-  generator EXIF/XMP/PNG signatures) and frequency-domain analysis, fused into one calibrated
-  confidence score.
+- 🧠 **Hybrid detection** — a neural model plus forensic metadata (C2PA provenance, generator
+  EXIF/XMP/PNG signatures) and frequency-domain analysis, fused into one calibrated score.
 
 ## Install
 
@@ -90,12 +94,15 @@ JPEG-recompress/resize augmentations), threshold 0.65:
 
 ```bash
 npm run dev        # watch-mode build
-npm test           # unit tests
-npm run cover      # coverage (v8)
-npm run test:e2e   # end-to-end in headless Chrome-for-Testing
-npm run lint       # eslint
-node bench/run-pipeline.mjs --model haywoodsloan-int8   # accuracy benchmark
+npm test           # unit + integration tests (157)
+npm run cover      # coverage (v8, gated)
+npm run test:e2e   # end-to-end in headless Chrome-for-Testing (6 cases)
+npm run lint       # eslint (blocks CI)
+node bench/run-pipeline.mjs --model haywoodsloan-int8   # accuracy benchmark (75% gate)
 ```
+
+CI runs lint → tests+coverage → security audit → build → e2e on every push/PR; releases build,
+test, package, and publish the zip on `v*` tags.
 
 Docs: [Architecture](docs/ARCHITECTURE.md) · [Model provenance](docs/MODEL.md) ·
 [Benchmark](docs/BENCHMARK.md) · [Testing](docs/TESTING.md) · [Changelog](CHANGELOG.md)
