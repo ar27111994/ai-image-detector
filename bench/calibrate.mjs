@@ -12,7 +12,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { seededShuffle } from '../src/shared/rng.js';
-import { balancedAccuracyWithCi } from '../src/shared/metrics.js';
+import { balancedAccuracyWithCi, expectedCalibrationError } from '../src/shared/metrics.js';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT_PATH = path.join(repoRoot, 'src', 'shared', 'fusion', 'calibration.js');
@@ -93,11 +93,16 @@ async function main() {
   const calibratedTest = test.map((r) => ({ ...r, score: sigmoid(a * logit(r.score) + b) }));
   const before = balancedAccuracyWithCi(test, args.threshold);
   const after = balancedAccuracyWithCi(calibratedTest, args.threshold);
+  const eceBefore = expectedCalibrationError(test);
+  const eceAfter = expectedCalibrationError(calibratedTest);
 
   console.log(`[calibrate] train=${train.length} test=${test.length}`);
   console.log(`[calibrate] fitted a=${a.toFixed(4)} b=${b.toFixed(4)}`);
   console.log(
     `[calibrate] test BA @ ${args.threshold}: before=${(before.balancedAccuracy * 100).toFixed(2)}%  after=${(after.balancedAccuracy * 100).toFixed(2)}%`,
+  );
+  console.log(
+    `[calibrate] ECE: before=${eceBefore.ece.toFixed(4)}  after=${eceAfter.ece.toFixed(4)}  (lower is better)`,
   );
 
   const out = `/**
@@ -112,12 +117,19 @@ export const CALIBRATION = Object.freeze({
   trainSize: ${train.length},
   testBalancedAccuracyBefore: ${before.balancedAccuracy},
   testBalancedAccuracyAfter: ${after.balancedAccuracy},
+  eceBefore: ${eceBefore.ece},
+  eceAfter: ${eceAfter.ece},
 });
 `;
   await writeFile(OUT_PATH, out, 'utf8');
   console.log(`[calibrate] wrote ${path.relative(repoRoot, OUT_PATH)}`);
   if (after.balancedAccuracy < before.balancedAccuracy) {
     console.warn('[calibrate] WARNING: calibration reduced test BA — consider disabling.');
+  }
+  if (eceAfter.ece > eceBefore.ece) {
+    console.warn(
+      '[calibrate] WARNING: calibration worsened ECE — consider temperature scaling instead.',
+    );
   }
 }
 

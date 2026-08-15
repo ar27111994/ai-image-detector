@@ -10,7 +10,7 @@
  *
  * Usage: node bench/run-pipeline.mjs --model haywoodsloan-int8 [--only raw|augmented] [--tag x]
  */
-import { readFile, writeFile } from 'node:fs/promises';
+import { open, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
@@ -70,11 +70,34 @@ async function main() {
   if (args.limit > 0) entries = entries.slice(0, args.limit);
 
   console.log(`[pipeline] ${entries.length} images, model=${name}`);
+
+  // Resumable + observable: write each result to the output file as it completes and log
+  // progress to stderr (unbuffered by the runner's stdout pipe). A killed run leaves a partial
+  // results file that can be resumed with --resume.
+  const outPath = path.join(RESULTS_DIR, `${name}__${args.tag}.jsonl`);
+  const resume = process.argv.includes('--resume');
   const results = [];
+  const doneIds = new Set();
+  if (resume) {
+    try {
+      const prior = (await readFile(outPath, 'utf8')).trim().split('\n').filter(Boolean);
+      for (const line of prior) {
+        const r = JSON.parse(line);
+        results.push(r);
+        doneIds.add(r.id);
+      }
+      console.log(`[pipeline] resuming: ${doneIds.size} already done`);
+    } catch {
+      /* no prior file */
+    }
+  }
+  const outStream = await open(outPath, resume ? 'a' : 'w');
+
   let done = 0;
   const t0 = Date.now();
 
   for (const entry of entries) {
+    if (resume && doneIds.has(entry.id)) continue; // already computed in a prior run
     const abs = path.join(repoRoot, entry.path);
     try {
       const bytes = await readFile(abs);
@@ -117,7 +140,7 @@ async function main() {
       }
 
       const fused = fuseSignals({ neuralScore, forensic }, { threshold: args.threshold });
-      results.push({
+      const record = {
         id: entry.id,
         label: entry.label,
         generator: entry.generator,
@@ -126,27 +149,31 @@ async function main() {
         neuralScore,
         forensicDefinitive: forensic.definitive,
         verdict: fused.verdict,
-      });
+      };
+      results.push(record);
+      await outStream.appendFile(JSON.stringify(record) + '\n', 'utf8');
     } catch (err) {
-      results.push({
+      const record = {
         id: entry.id,
         label: entry.label,
         error: String(err?.message ?? err),
         score: null,
-      });
+      };
+      results.push(record);
+      await outStream.appendFile(JSON.stringify(record) + '\n', 'utf8');
     }
-    if (++done % 25 === 0) {
-      console.log(
-        `[pipeline] ${done}/${entries.length} (${(done / ((Date.now() - t0) / 1000)).toFixed(1)}/s)`,
-      );
-    }
+    done++;
+    // Progress to stderr (unbuffered) so long runs are observable + resumable.
+    const elapsed = (Date.now() - t0) / 1000;
+    const rate = done / elapsed;
+    const eta =
+      rate > 0 ? Math.round((entries.length - done - (resume ? doneIds.size : 0)) / rate) : 0;
+    process.stderr.write(
+      `\r[pipeline] ${done}/${entries.length - (resume ? doneIds.size : 0)} done (${rate.toFixed(1)}/s, ~${Math.floor(eta / 60)}m ${eta % 60}s left)   `,
+    );
   }
-
-  await writeFile(
-    path.join(RESULTS_DIR, `${name}__${args.tag}.jsonl`),
-    results.map((r) => JSON.stringify(r)).join('\n') + '\n',
-    'utf8',
-  );
+  process.stderr.write('\n');
+  await outStream.close();
 
   const m = balancedAccuracyWithCi(results, args.threshold);
   const pct = (x) => `${(x * 100).toFixed(2)}%`;

@@ -98,6 +98,45 @@ export function thresholdSweep(rows, thresholds) {
 }
 
 /**
+ * Expected Calibration Error (ECE): how well predicted probabilities match empirical outcomes.
+ * Bins scored samples by confidence, averages |accuracy - meanConfidence| weighted by bin size.
+ * Lower is better; 0 = perfectly calibrated. Independent of the decision threshold.
+ *
+ * @param {Array<{label: string, score: number|null, error?: string}>} rows
+ * @param {number} bins number of confidence bins
+ * @returns {{ ece: number, bins: Array<{ center: number, accuracy: number, meanConfidence: number, count: number }> }}
+ */
+export function expectedCalibrationError(rows, bins = 10) {
+  const scored = rows.filter((r) => r.score != null && !r.error && !Number.isNaN(r.score));
+  if (scored.length === 0) return { ece: 0, bins: [] };
+
+  const buckets = Array.from({ length: bins }, () => ({ sumConf: 0, correct: 0, count: 0 }));
+  for (const row of scored) {
+    const s = Math.min(1, Math.max(0, row.score));
+    // Confidence = strength of the prediction regardless of class: max(p_ai, 1 - p_ai).
+    const confidence = Math.max(s, 1 - s);
+    const b = Math.min(bins - 1, Math.floor(confidence * bins));
+    const predFake = s >= 0.5;
+    const isCorrect = (predFake && row.label === 'fake') || (!predFake && row.label === 'real');
+    buckets[b].sumConf += confidence;
+    if (isCorrect) buckets[b].correct++;
+    buckets[b].count++;
+  }
+
+  let ece = 0;
+  const outBins = [];
+  for (let i = 0; i < bins; i++) {
+    const { sumConf, correct, count } = buckets[i];
+    if (count === 0) continue;
+    const meanConfidence = sumConf / count;
+    const accuracy = correct / count;
+    ece += (count / scored.length) * Math.abs(accuracy - meanConfidence);
+    outBins.push({ center: (i + 0.5) / bins, accuracy, meanConfidence, count });
+  }
+  return { ece, bins: outBins };
+}
+
+/**
  * Group rows by a key and compute balanced accuracy per group.
  * @param {Array} rows
  * @param {(row) => string} keyFn

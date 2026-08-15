@@ -4,10 +4,12 @@
  */
 export const CALIBRATION = Object.freeze({
   enabled: true,
-  a: 0.5204275499101693,
-  b: 2.9321089913761167,
-  fittedOn: 'haywoodsloan-int8__full-raw.jsonl',
+  a: 1.0398150338581258,
+  b: 0.04050349671002348,
+  fittedOn: 'haywoodsloan-int8__pipeline-raw.jsonl',
   trainSize: 235,
-  testBalancedAccuracyBefore: 0.80688088283025,
-  testBalancedAccuracyAfter: 0.837796170074651,
+  testBalancedAccuracyBefore: 0.8313859136643946,
+  testBalancedAccuracyAfter: 0.8281402142161636,
+  eceBefore: 0.1960040829440803,
+  eceAfter: 0.21925853319732908,
 });
