@@ -9,58 +9,111 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
-  lint-build-test:
+  quality:
+    name: Lint, format
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
           cache: npm
-
       - name: Install (locked)
         run: npm ci
-
-      - name: Lint
+      - name: Lint (blocks on error)
         run: npm run lint
-
-      - name: Format check
+      - name: Format check (blocks on diff)
         run: npm run format:check
 
-      - name: Unit + integration tests
+  test:
+    name: Unit + integration tests with coverage gate
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install (locked)
+        run: npm ci
+      - name: Tests + coverage (fails below thresholds)
         run: npm run cover
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 14
 
+  security:
+    name: Security & dependency audit
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install (locked)
+        run: npm ci
+      - name: npm audit (high+ severity fails)
+        run: npm audit --audit-level=high
+      - name: No unexpected remote URLs in shipped runtime
+        shell: pwsh
+        run: |
+          $bad = Get-ChildItem -Recurse src -Filter *.js |
+            Select-String -Pattern 'https?://' |
+            Where-Object { $_.Line -notmatch 'github\.com/ar27111994|huggingface\.co|iptc\.org|ns\.adobe\.com|w3\.org' }
+          if ($bad) { $bad | ForEach-Object { Write-Host "$($_.Path):$($_.LineNumber): $($_.Line)" }; throw 'unexpected remote URL in runtime code' }
+          Write-Host 'no unexpected remote URLs in src/'
+
+  build:
+    name: Build + dist verification
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install (locked)
+        run: npm ci
       - name: Build extension
         run: npm run build
-
       - name: Verify dist layout
         shell: pwsh
         run: |
           $required = @('dist/manifest.json', 'dist/background.js', 'dist/offscreen.js', `
             'dist/content.js', 'dist/pages/offscreen.html', 'dist/pages/popup.html', `
-            'dist/vendor/ort-wasm-simd-threaded.jsep.wasm')
+            'dist/pages/tokens.css', 'dist/vendor/ort-wasm-simd-threaded.jsep.wasm')
           foreach ($f in $required) {
             if (-not (Test-Path $f)) { throw "missing $f" }
           }
           Write-Host 'dist layout OK'
+      - name: Upload dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: extension-dist
+          path: dist/
+          retention-days: 14
 
   e2e:
+    name: E2E (headless Chrome-for-Testing)
     runs-on: windows-latest
+    needs: build
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
           cache: npm
-
       - name: Install (locked)
         run: npm ci
-
       - name: Build extension
         run: npm run build
-
-      - name: E2E (headless Chrome, real extension load)
+      - name: E2E suite
         run: npm run test:e2e

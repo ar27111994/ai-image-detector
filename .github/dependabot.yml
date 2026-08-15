@@ -1,0 +1,23 @@
+# Dependabot: keep dependencies current (security + maintenance gate).
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: '/'
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    versioning-strategy: increase
+    labels: ['dependencies']
+    # onnxruntime-web/-node are version-locked together and to the vendored wasm assets —
+    # review those manually rather than auto-bumping.
+    ignore:
+      - dependency-name: 'onnxruntime-web'
+      - dependency-name: 'onnxruntime-node'
+
+  - package-ecosystem: github-actions
+    directory: '/'
+    schedule:
+      interval: weekly
+    labels: ['ci']
