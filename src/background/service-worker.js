@@ -175,7 +175,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return respond(getStatus());
 
     case MSG.GET_TAB_STATS:
-      return respond(Promise.resolve(getTabStats(sender.tab?.id)));
+      return respond(Promise.resolve(getTabStats(sender.tab?.id ?? message.payload?.tabId)));
 
     case MSG.SET_SITE_ENABLED:
       return respond(setSiteEnabledFor(sender, message.payload));
@@ -193,7 +193,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return respond(analyzeByUrl(message.payload, sender));
 
     case MSG.ANALYZE_IMAGE_BYTES:
-      return respond(analyzeByBytes(message.payload));
+      return respond(analyzeByBytes(message.payload, sender));
 
     default:
       return false;
@@ -219,15 +219,19 @@ async function analyzeByUrl(payload, sender) {
   }
 
   const bytes = await fetchImageBytes(url);
-  return await analyzeBytes(bytes, url, minSize ?? settings.minImageSize);
+  const result = await analyzeBytes(bytes, url, minSize ?? settings.minImageSize);
+  recordTabVerdict(sender?.tab?.id, result);
+  return result;
 }
 
-async function analyzeByBytes(payload) {
+async function analyzeByBytes(payload, sender) {
   const { bytes, minSize } = payload ?? {};
   const buffer = normalizeBytes(bytes);
   if (!buffer) throw Object.assign(new Error('bytes required'), { code: 'BAD_INPUT' });
   const settings = await loadSettings();
-  return await analyzeBytes(buffer, null, minSize ?? settings.minImageSize);
+  const result = await analyzeBytes(buffer, null, minSize ?? settings.minImageSize);
+  recordTabVerdict(sender?.tab?.id, result);
+  return result;
 }
 
 function normalizeBytes(bytes) {
@@ -286,10 +290,40 @@ async function analyzeBytes(bytes, sourceUrl, minSize) {
 
 /* ---------------------------------- status ---------------------------------- */
 
-function getTabStats(_tabId) {
-  // Phase 3 wires per-tab counters from content scripts.
-  return { ai: 0, real: 0, uncertain: 0, error: 0, analyzed: 0 };
+/** Per-tab analysis tallies for the popup. Reset when a tab navigates/closes. */
+const tabStats = new Map(); // tabId -> { ai, real, uncertain, error, analyzed }
+
+function recordTabVerdict(tabId, result) {
+  if (tabId == null || result == null || result.skipped) return;
+  const s = tabStats.get(tabId) ?? { ai: 0, real: 0, uncertain: 0, error: 0, analyzed: 0 };
+  const v = result.verdict;
+  if (v === 'ai') s.ai++;
+  else if (v === 'real') s.real++;
+  else if (v === 'uncertain') s.uncertain++;
+  else s.error++;
+  s.analyzed++;
+  tabStats.set(tabId, s);
 }
+
+function getTabStats(tabId) {
+  if (tabId != null && tabStats.has(tabId)) return { tabId, ...tabStats.get(tabId) };
+  // Aggregate across tabs when no specific tab is known.
+  const totals = { ai: 0, real: 0, uncertain: 0, error: 0, analyzed: 0 };
+  for (const s of tabStats.values()) {
+    totals.ai += s.ai;
+    totals.real += s.real;
+    totals.uncertain += s.uncertain;
+    totals.error += s.error;
+    totals.analyzed += s.analyzed;
+  }
+  return { tabId: tabId ?? null, ...totals };
+}
+
+// Drop stats for closed tabs so the map doesn't grow unbounded.
+chrome.tabs.onRemoved.addListener((tabId) => tabStats.delete(tabId));
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (changeInfo.status === 'loading') tabStats.delete(tabId); // fresh page -> fresh stats
+});
 
 async function getStatus() {
   const model = await modelManager.getModelState();

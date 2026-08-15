@@ -98,6 +98,7 @@ export default [
         NodeFilter: 'readonly',
         confirm: 'readonly',
         requestAnimationFrame: 'readonly',
+        cancelAnimationFrame: 'readonly',
         HTMLElement: 'readonly',
         Element: 'readonly',
         Node: 'readonly',
