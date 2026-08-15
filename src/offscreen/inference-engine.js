@@ -12,6 +12,7 @@
 import * as ort from 'onnxruntime-web';
 import { preprocessRgba } from '../shared/preprocess.js';
 import { getModelBlob } from '../shared/model-store.js';
+import { computeViewRects, meanLogits } from '../shared/tta.js';
 
 /** Ordered EP preference; wasm is the guaranteed fallback. */
 const EP_PREFERENCE = ['webgpu', 'wasm'];
@@ -151,47 +152,22 @@ export async function analyzeImageBytes(bytes) {
     const height = bitmap.height;
 
     const size = activeSpec.inputSize;
+    // Multi-view TTA: full frame + center/corner crop grid for large images (shared logic).
+    const rects = computeViewRects(width, height, size);
     const viewsLogits = [];
-
-    // Full-frame view (always).
-    viewsLogits.push(await inferViewLogits(bitmap, 0, 0, width, height, size));
-
-    // Patch grid when the source is large enough that downscaling would dominate.
-    const minDim = Math.min(width, height);
-    if (minDim >= size * 2) {
-      const crop = Math.floor(minDim * 0.5); // 50% crops
-      const halfW = Math.floor((crop * (width / minDim)) / 2) * 2;
-      const halfH = Math.floor((crop * (height / minDim)) / 2) * 2;
-      const offsets = [
-        [0, 0],
-        [width - halfW, 0],
-        [0, height - halfH],
-        [width - halfW, height - halfH],
-        [Math.floor((width - halfW) / 2), Math.floor((height - halfH) / 2)],
-      ];
-      for (const [ox, oy] of offsets) {
-        viewsLogits.push(await inferViewLogits(bitmap, ox, oy, halfW, halfH, size));
-      }
+    for (const r of rects) {
+      viewsLogits.push(await inferViewLogits(bitmap, r.sx, r.sy, r.sw, r.sh, size));
     }
-
-    // Test-time augmentation: average LOGITS across views (not probabilities) — averaging
-    // pre-softmax logits preserves the discriminative signal better than averaging calibrated
-    // probabilities, and is the measured-correct way to do multi-crop TTA.
-    const nViews = viewsLogits.length;
-    const nClasses = viewsLogits[0].length;
-    const meanLogits = new Array(nClasses).fill(0);
-    for (const logits of viewsLogits) {
-      for (let c = 0; c < nClasses; c++) meanLogits[c] += logits[c] / nViews;
-    }
-    const score = scoreFromOutput(meanLogits, activeSpec);
+    const mean = meanLogits(viewsLogits);
+    const score = scoreFromOutput(mean, activeSpec);
     return {
       score,
-      rawOutput: meanLogits,
+      rawOutput: mean,
       width,
       height,
       latencyMs: Math.round(performance.now() - t0),
       ep: activeEp,
-      views: nViews,
+      views: rects.length,
     };
   } finally {
     bitmap.close(); // always release GPU memory, even on error

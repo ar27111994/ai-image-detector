@@ -17,6 +17,7 @@ import sharp from 'sharp';
 import { preprocessRgba } from '../src/shared/preprocess.js';
 import { extractForensicSignals } from '../src/shared/metadata/forensic-extractor.js';
 import { fuseSignals } from '../src/shared/fusion/fuse.js';
+import { computeViewRects, meanLogits } from '../src/shared/tta.js';
 import { resolveModel } from './model-loader.mjs';
 import { balancedAccuracyWithCi } from '../src/shared/metrics.js';
 
@@ -82,26 +83,37 @@ async function main() {
 
       let neuralScore = 0.5;
       if (!forensic.definitive) {
-        const { data, info } = await sharp(abs, { failOn: 'none' })
-          .flatten({ background: '#ffffff' })
-          .raw()
-          .ensureAlpha()
-          .toBuffer({ resolveWithObject: true });
-        const tensor = preprocessRgba(
-          new Uint8ClampedArray(data.buffer, data.byteOffset, data.byteLength),
-          info.width,
-          info.height,
-          spec,
-        );
-        const out = await session.run({
-          [inputName]: new ort.Tensor('float32', tensor.data, tensor.dims),
-        });
-        const output = Array.from(out[outputName].data);
+        // Multi-view TTA identical to the shipped engine: full frame + crop grid for large
+        // images, logits averaged pre-softmax. Same shared helpers (computeViewRects/meanLogits).
+        const meta = await sharp(abs, { failOn: 'none' }).metadata();
+        const W = meta.width ?? 0;
+        const H = meta.height ?? 0;
+        const size = spec.inputSize;
+        const rects = computeViewRects(W, H, size);
+        const viewsLogits = [];
+        for (const r of rects) {
+          const { data, info } = await sharp(abs, { failOn: 'none' })
+            .flatten({ background: '#ffffff' })
+            .extract({ left: r.sx, top: r.sy, width: r.sw, height: r.sh })
+            .raw()
+            .ensureAlpha()
+            .toBuffer({ resolveWithObject: true });
+          const tensor = preprocessRgba(
+            new Uint8ClampedArray(data.buffer, data.byteOffset, data.byteLength),
+            info.width,
+            info.height,
+            spec,
+          );
+          const out = await session.run({
+            [inputName]: new ort.Tensor('float32', tensor.data, tensor.dims),
+          });
+          viewsLogits.push(Array.from(out[outputName].data));
+        }
+        const mean = meanLogits(viewsLogits);
         neuralScore =
           spec.outputType === 'p_real'
-            ? 1 - output[0]
-            : Math.exp(output[spec.aiLogitIndex ?? 1]) /
-              (Math.exp(output[0]) + Math.exp(output[1]));
+            ? 1 - mean[0]
+            : Math.exp(mean[spec.aiLogitIndex ?? 1]) / (Math.exp(mean[0]) + Math.exp(mean[1]));
       }
 
       const fused = fuseSignals({ neuralScore, forensic }, { threshold: args.threshold });
