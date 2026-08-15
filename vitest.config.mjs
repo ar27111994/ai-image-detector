@@ -6,7 +6,7 @@ export default defineConfig({
     environment: 'node',
     coverage: {
       provider: 'v8',
-      reporter: ['text', 'html', 'lcov'],
+      reporter: ['text', 'html', 'lcov', 'json-summary'],
       reportsDirectory: 'coverage',
       // Coverage is scoped to the pure, platform-independent logic plus the model manager
       // (heavily unit-tested). The service worker router / offscreen inference engine / content

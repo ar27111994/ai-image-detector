@@ -42,6 +42,20 @@ balanced accuracy; the harness exits non-zero below the bar):
 node bench/run-pipeline.mjs --model haywoodsloan-int8
 ```
 
+## Auto-synced documentation numbers
+
+Dynamic values in docs (version, test counts, coverage %, benchmark accuracy) are **not edited by
+hand**. They're marked with `<!-- AUTO:KEY -->…<!-- /AUTO:KEY -->` placeholders and recomputed
+from the source of truth by a tool:
+
+```bash
+npm run docs:sync    # recompute + write marked values (test count, coverage, accuracy, version)
+npm run docs:check   # exit non-zero if any marked doc is stale (runs in CI)
+```
+
+If you add a dynamic number to a doc, wrap it in an `AUTO:` marker and add its computation to
+`tools/sync-docs.mjs`. CI fails the `test` job if marked docs drift from the computed values.
+
 ## Conventions
 
 - **Code style**: vanilla ES2022 modules, Prettier + ESLint enforced. Follow the existing
