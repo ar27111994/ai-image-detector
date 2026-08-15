@@ -1,6 +1,30 @@
 # Bounty rule compliance (poidh.xyz #323)
 
-Every rule mapped to evidence in this repository.
+Every rule mapped to evidence in this repository. **Verified by direct code audit** (2026-08-15):
+every `fetch`/network call, every model-load path, the manifest permissions, and the built `dist/`
+bundle were inspected — not just asserted.
+
+## Code-audit evidence summary
+
+- **All network `fetch` calls in `src/`** (5 sites, all inputs — never uploads):
+  1. `model-manager.js` `loadManifest()` — reads the **bundled** `models/manifest.json` (a
+     `chrome-extension://` resource, not remote).
+  2. `model-manager.js` `downloadVariant()` — the **one-time** SHA-256-verified model download.
+  3. `model-manager.js` `loadBundledVariant()` — reads a **bundled** model from
+     `chrome-extension://…/models/<key>.onnx` (zero network).
+  4. `service-worker.js` `fetchImageBytes()` — fetches the image's **own URL** for local analysis
+     (the same bytes the browser already loaded; never a POST/upload).
+  5. `content.js` `readElementBytes()` — reads a page's own `blob:`/`data:` URL in-page (no
+     network).
+- **No** `XMLHttpRequest`, `WebSocket`, `sendBeacon`, `EventSource`, `child_process`, `spawn`,
+  `FormData` POST, or `connectNative`/`nativeMessaging` anywhere in `src/`.
+- **Manifest permissions**: `storage, offscreen, unlimitedStorage, contextMenus` +
+  `host_permissions: <all_urls>` (required to fetch cross-origin image bytes for local analysis).
+  No `nativeMessaging`.
+- **Built `dist/`** contains only JS/HTML/CSS/wasm/icons and the manifest pointer — no benchmark
+  images, no hash lookup tables, no evaluation fixtures.
+- **No evaluation detection**: no `navigator.webdriver`, user-agent sniffing, or any code path
+  that behaves differently under evaluation.
 
 ## Hard requirements
 
