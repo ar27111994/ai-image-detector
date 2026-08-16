@@ -59,13 +59,14 @@ async function computeValues() {
     console.warn('[sync] no coverage-summary.json — run npm run cover first');
   }
 
-  // Benchmark accuracy from the canonical result files. BA_RAW is the SHIPPED pipeline
-  // (single-view + forensic fusion + Platt calibration), measured by the definitive run
-  // (single-full-final). BA_RAW_UNCALIBRATED is the raw neural score without calibration,
-  // kept for the calibration-quality discussion in BENCHMARK.md.
+  // Benchmark accuracy from the canonical result files. BA_RAW and BA_AUGMENTED are the SHIPPED
+  // pipeline (single-view + forensic fusion + Platt calibration), measured by the definitive
+  // full-set runs (single-full-final = 471 raw, single-aug-final = 1413 augmented).
+  // BA_RAW_UNCALIBRATED keeps the raw neural score (no calibration) for the calibration-quality
+  // discussion in BENCHMARK.md.
   values.BA_RAW = await latestBa('haywoodsloan-int8__single-full-final.jsonl');
   values.BA_RAW_UNCALIBRATED = await latestBa('haywoodsloan-int8__single-full.jsonl');
-  values.BA_AUGMENTED = await latestBa('haywoodsloan-int8__single-aug.jsonl');
+  values.BA_AUGMENTED = await latestBa('haywoodsloan-int8__single-aug-final.jsonl');
 
   // Whole-line shields.io accuracy badge (kept in sync with BA_RAW). The label encodes % as %25.
   if (values.BA_RAW) {

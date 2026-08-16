@@ -7,9 +7,9 @@ citations were gathered from primary sources; this file records the actionable c
 
 ## Where we already are (honest baseline)
 
-- Our pipeline: **84.2% balanced accuracy** (raw, shipped Platt calibration) / **83.1%**
-  (web-augmented) @ 0.65 on a 471-image, 47-generator modern set (full runs, measured on the
-  shipped single-view path). The raw neural score before calibration is 81.5%.
+- Our pipeline: **84.2% balanced accuracy** (raw, shipped Platt calibration) / **83.0%**
+  (web-augmented, full 1,413-image set) @ 0.65 on a 471-image, 47-generator modern set (full runs,
+  measured on the shipped single-view path). The raw neural score before calibration is 81.5%.
 - 2026 reference points: DailyBench shows methods reporting 91–96% on GenImage drop to **60–76%**
   on modern web-realistic generators (FakeBench) and **54–66%** on manipulation/inpainting.
   **Our numbers are within the practical SOTA band on web-realistic data (76–86%).**

@@ -105,7 +105,7 @@ JPEG-recompress/resize augmentations), threshold 0.65:
 
 - **Balanced accuracy: <!-- AUTO:BA_RAW -->84.2%<!-- /AUTO:BA_RAW -->** (TPR 82.6%, TNR 85.8%) on
   the raw split under the exact calibration the extension ships;
-  **<!-- AUTO:BA_AUGMENTED -->83.1%<!-- /AUTO:BA_AUGMENTED -->** on the web-augmented split. (The
+  **<!-- AUTO:BA_AUGMENTED -->83.0%<!-- /AUTO:BA_AUGMENTED -->** on the web-augmented split. (The
   raw neural score before calibration is
   <!-- AUTO:BA_RAW_UNCALIBRATED -->81.5%<!-- /AUTO:BA_RAW_UNCALIBRATED -->.) See
   [docs/BENCHMARK.md](docs/BENCHMARK.md) for the full methodology, per-generator breakdown, and

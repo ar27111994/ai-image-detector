@@ -2,6 +2,55 @@
 
 All notable changes to this project are documented here. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+Post-release hardening, audit, and polish (no accuracy change — same shipped pipeline).
+
+### Fixed (accuracy documentation)
+
+- **Accuracy figures corrected to the shipped numbers.** The README and some docs previously
+  showed the _uncalibrated_ raw neural score (81.5%) while claiming it was the calibrated pipeline
+  result. `tools/sync-docs.mjs` now sources the definitive shipped-calibration runs
+  (`haywoodsloan-int8__single-full-final.jsonl`, `haywoodsloan-int8__single-aug-final.jsonl`):
+  **84.2% raw** / **83.0% augmented (full 1,413-image set)** @ 0.65. The augmented figure replaces
+  a non-representative 103-image subset (83.13%) with the full-set measurement. Both numbers were
+  reproduced live by re-running the shipped pipeline (`bench/run-pipeline.mjs`).
+
+### Added (compliance, security, CI)
+
+- **NOTICE** file (REQ-21): licenses for every bundled third-party component — onnxruntime-web,
+  exifr, fft.js (all MIT) and the haywoodsloan detection model (Apache-2.0). `LICENSE` + `NOTICE`
+  now ship inside `dist/`.
+- **CodeQL** workflow (security-and-quality, SHA-pinned, weekly + per-push/PR).
+- **Release gates**: tag must be valid semver and match `package.json`/`manifest.json`; clean-tree
+  check; `release/SHA256SUMS` generated for every published artifact and attached to the release.
+- **Dependabot**: pip ecosystem for the model-conversion toolchain.
+- New design tokens (`--focus-ring-contrast`, `--target-min`, `--control-size-checkbox`,
+  `--z-badge-*`, named skeletons) and a shared test fixture (`tests/helpers/dom-stub.js`).
+
+### Fixed (accessibility / UI)
+
+- Badge detail panel now follows `prefers-color-scheme` (was hardcoded dark).
+- `aria-describedby="null"` regression fixed (attribute now omitted when no hint exists).
+- Touch targets raised to the 24px WCAG 2.5.8 minimum (badge, link buttons).
+- High-contrast focus ring on saturated buttons; form controls get hover/disabled states.
+- Popup shows a loading skeleton while the service worker responds.
+- `manifest.json` gains `homepage_url`.
+
+### Changed (code quality)
+
+- `clamp01` deduplicated into `src/shared/math.js`; dead `aiProbability` export removed
+  (softmax moved to `math.js`); all timeout/byte budgets centralized in `shared/constants.js`
+  (`TIMEOUTS`, `MAX_IMAGE_BYTES`); model-variant selection shared via `shared/model-variant.js`.
+- `getModelBlob` (IndexedDB) is now time-bounded like every other store op.
+
+### Testing
+
+- **263 tests / 31 files** (was 227/24). New unit suites for the previously untested
+  popup/options/onboarding pages, the offscreen orchestrator, and the service-worker router
+  (sender auth, cache, stampede dedup, site-disable). Integration dispatch harness de-flaked
+  (event-driven latch replaces fixed sleeps). Coverage gate still ≥90% (97.0/91.1/93.1 measured).
+
 ## [1.0.0] — 2026-08-14 — Milestone 1 (first qualifying submission)
 
 ### Added
@@ -24,8 +73,10 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ### Accuracy (internal public benchmark, threshold 0.65, full runs on the shipped single-view path)
 
-- Full pipeline, raw split (471 images): **81.5% balanced accuracy** (TPR 63.6 / TNR 99.4).
-- Augmented split (1413 images: jpeg70/85 + resize50): **83.1% BA** (TPR 78.4 / TNR 87.9).
+- Full pipeline, raw split (471 images), shipped calibration: **84.2% balanced accuracy**
+  (TPR 82.6 / TNR 85.8). The raw neural score before calibration was 81.5% (TPR 63.6 / TNR 99.4).
+- Augmented split (1413 images: jpeg70/85 + resize50), shipped calibration: **83.0% BA**
+  (TPR 81.0 / TNR 85.0). (Supersedes an earlier 83.1% figure from a 103-image subset.)
 - Crop-grid TTA was implemented and **rejected by measurement** (regressed BA to 79.6%); it is
   off by default (`enableCropGrid: false`). Calibration is ECE-verified (0.244 → 0.059).
 

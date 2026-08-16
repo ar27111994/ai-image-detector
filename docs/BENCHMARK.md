@@ -46,14 +46,16 @@ fusion layer; this is the number that must clear the bounty bar.
 | Split                                                | n    | TPR   | TNR   | **Balanced Acc** | ECE   | 95% CI         |
 | ---------------------------------------------------- | ---- | ----- | ----- | ---------------- | ----- | -------------- |
 | Raw (shipped calibration)                            | 471  | 82.6% | 85.8% | **84.20%**       | 0.047 | [78.7%, 88.4%] |
-| Augmented (jpeg70/85, resize50; shipped calibration) | 1413 | 78.4% | 87.9% | **83.13%**       | 0.034 | [70.3%, 91.2%] |
+| Augmented (jpeg70/85, resize50; shipped calibration) | 1413 | 81.0% | 85.0% | **82.98%**       | —     | [79.9%, 85.7%] |
 
 Per-augmentation detail (uncalibrated): jpeg70 78.8%, jpeg85 80.7%, resize50 82.4%.
 
-**Result: 84.20% balanced accuracy @ 0.65 on the raw internal benchmark, 83.13% on the augmented
-split — both under the exact calibration the extension ships, both above the 75% bounty bar and
-the 80% internal safety gate.** Numbers recomputed by `node tools/sync-docs.mjs` from the results
-files — never hand-edited.
+**Result: 84.20% balanced accuracy @ 0.65 on the raw internal benchmark, 82.98% on the full
+1,413-image augmented split — both under the exact calibration the extension ships, both above the
+75% bounty bar and the 80% internal safety gate.** Numbers recomputed by `node tools/sync-docs.mjs`
+from the results files — never hand-edited. (The augmented figure is the full 1,413-image run,
+`haywoodsloan-int8__single-aug-final.jsonl`; an earlier 103-image convenience subset reported
+83.13% and has been superseded by the full-set number.)
 
 ### TTA experiment (measured, rejected)
 
