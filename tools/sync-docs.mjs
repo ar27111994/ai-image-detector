@@ -68,13 +68,48 @@ async function computeValues() {
   values.BA_RAW_UNCALIBRATED = await latestBa('haywoodsloan-int8__single-full.jsonl');
   values.BA_AUGMENTED = await latestBa('haywoodsloan-int8__single-aug-final.jsonl');
 
-  // Whole-line shields.io accuracy badge (kept in sync with BA_RAW). The label encodes % as %25.
+  // Shields.io accuracy badge number (kept in sync with BA_RAW), e.g. "84.2". Applied by a
+  // dedicated regex in syncReadmeBadge() — the badge line carries NO AUTO marker so it renders
+  // as a real image on every markdown renderer (GitHub, VS Code preview, etc.).
   if (values.BA_RAW) {
-    const num = values.BA_RAW.replace('%', ''); // e.g. "84.5"
-    values.BA_BADGE = `[![Balanced accuracy: ${values.BA_RAW}](https://img.shields.io/badge/balanced%20accuracy-${num}%25-success)](docs/BENCHMARK.md)`;
+    values.BA_BADGE = values.BA_RAW.replace('%', '');
   }
 
   return values;
+}
+
+/**
+ * Update the README's balanced-accuracy shields.io badge in place. The badge is pure markdown
+ * (no HTML-comment markers) so it renders everywhere; we rewrite just the two embedded numbers
+ * (the visible label and the URL-encoded value) via regex.
+ * @param {boolean} check when true, only report staleness (no write)
+ * @returns {Promise<boolean>} true if the file was (or would be) changed
+ */
+async function syncReadmeBadge(values, { check }) {
+  const file = path.join(repoRoot, 'README.md');
+  let content;
+  try {
+    content = await readFile(file, 'utf8');
+  } catch {
+    return false;
+  }
+  const num = values.BA_BADGE;
+  if (!num) return false;
+  const re =
+    /\[!\[Balanced accuracy: [\d.]+%\]\(https:\/\/img\.shields\.io\/badge\/balanced%20accuracy-[\d.]+(%25)-[a-z]+\)\]\(docs\/BENCHMARK\.md\)/;
+  const replacement = `[![Balanced accuracy: ${num}%](https://img.shields.io/badge/balanced%20accuracy-${num}%25-success)](docs/BENCHMARK.md)`;
+  if (!re.test(content)) return false; // badge line not found / unexpected shape — leave it alone
+  const next = content.replace(re, replacement);
+  const changed = next !== content;
+  if (changed) {
+    if (check) {
+      console.log('[sync] STALE: README.md (accuracy badge)');
+    } else {
+      await writeFile(file, next, 'utf8');
+      console.log('[sync] updated: README.md (accuracy badge)');
+    }
+  }
+  return changed;
 }
 
 async function latestBa(fileName) {
@@ -157,6 +192,11 @@ async function main() {
       console.log(`[sync] ${isCheck ? 'STALE' : 'updated'}: ${file}`);
     }
   }
+
+  // The README accuracy badge carries no AUTO marker (so it renders as an image everywhere);
+  // sync it via a dedicated regex and fold it into the staleness result.
+  const badgeStale = await syncReadmeBadge(values, { check: isCheck });
+  if (badgeStale) anyStale = true;
 
   console.log(`[sync] scanned ${files.length} docs; ${markedFiles} have AUTO markers`);
   if (isCheck && anyStale) {

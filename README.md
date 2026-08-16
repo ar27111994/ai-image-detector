@@ -7,7 +7,7 @@
 [![Chrome MV3](https://img.shields.io/badge/Chrome-Manifest%20V3-4285F4?logo=googlechrome&logoColor=white)](https://developer.chrome.com/docs/extensions/mv3/intro/)
 [![ONNX Runtime Web](https://img.shields.io/badge/inference-ONNX%20Runtime%20Web-005CED)](https://onnxruntime.ai/docs/tutorials/web/)
 
-<!-- AUTO:BA_BADGE -->[![Balanced accuracy: 84.2%](https://img.shields.io/badge/balanced%20accuracy-84.2%25-success)](docs/BENCHMARK.md)<!-- /AUTO:BA_BADGE -->
+[![Balanced accuracy: 84.2%](https://img.shields.io/badge/balanced%20accuracy-84.2%25-success)](docs/BENCHMARK.md)
 
 [![100% offline inference](https://img.shields.io/badge/inference-100%25%20offline-brightgreen)](docs/ARCHITECTURE.md)
 [![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-model%20sources-yellow)](https://huggingface.co/haywoodsloan/ai-image-detector-dev-deploy)
