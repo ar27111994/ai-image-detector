@@ -74,8 +74,9 @@ export function wilsonInterval(successes, total, z = 1.96) {
  * Balanced accuracy with a 95% CI. The CI is conservative: we take the Wilson interval of the
  * balanced proportion (treating BA as a proportion over positives+negatives balanced draws).
  *
- * @param {Array} rows
+ * @param {Array<{label: string, score: number|null, error?: string}>} rows
  * @param {number} threshold
+ * @returns {object} confusion stats plus `ci95: [low, high]` (95% Wilson interval on BA)
  */
 export function balancedAccuracyWithCi(rows, threshold) {
   const c = confusionAtThreshold(rows, threshold);
@@ -90,8 +91,9 @@ export function balancedAccuracyWithCi(rows, threshold) {
 
 /**
  * Sweep thresholds and return balanced accuracy at each.
- * @param {Array} rows
+ * @param {Array<{label: string, score: number|null, error?: string}>} rows
  * @param {number[]} thresholds
+ * @returns {Array<{ threshold: number } & ReturnType<typeof confusionAtThreshold>>}
  */
 export function thresholdSweep(rows, thresholds) {
   return thresholds.map((t) => ({ threshold: t, ...confusionAtThreshold(rows, t) }));
@@ -137,10 +139,11 @@ export function expectedCalibrationError(rows, bins = 10) {
 }
 
 /**
- * Group rows by a key and compute balanced accuracy per group.
- * @param {Array} rows
- * @param {(row) => string} keyFn
+ * Group rows by a key and compute balanced accuracy per group (sorted by group size, desc).
+ * @param {Array<{label: string, score: number|null, error?: string}>} rows
+ * @param {(row: object) => string} keyFn
  * @param {number} threshold
+ * @returns {Array<{ group: string, count: number } & ReturnType<typeof confusionAtThreshold>>}
  */
 export function perGroupMetrics(rows, keyFn, threshold) {
   const groups = new Map();

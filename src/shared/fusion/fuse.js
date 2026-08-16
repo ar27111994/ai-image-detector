@@ -19,6 +19,10 @@ const DEFAULT_THRESHOLD = 0.65;
  * Logistic (Platt-style) calibration of the neural score.
  * p = sigmoid(a * logit(neuralScore) + b)
  * Falls back to identity when calibration is disabled/invalid.
+ * @param {number} neuralScore raw model probability in [0,1]
+ * @param {{ enabled?: boolean, a?: number, b?: number }} [cal] calibration params (defaults to
+ *   the fitted, frozen CALIBRATION)
+ * @returns {number} calibrated probability in [0,1]
  */
 export function calibrate(neuralScore, cal = CALIBRATION) {
   // Guard against non-finite/NaN scores from a hostile or broken model — clamp to [0,1].
@@ -59,7 +63,12 @@ export function fuseSignals({ neuralScore, forensic }, opts = {}) {
   return { score: adjusted, verdict: verdictFor(adjusted, threshold), reasons };
 }
 
-/** Threshold-band verdict: >= threshold AI; < 1-threshold REAL; else UNCERTAIN. */
+/**
+ * Threshold-band verdict: >= threshold AI; < 1-threshold REAL; else UNCERTAIN.
+ * @param {number} score calibrated AI probability in [0,1]
+ * @param {number} [threshold]
+ * @returns {string} one of VERDICT
+ */
 export function verdictFor(score, threshold = DEFAULT_THRESHOLD) {
   if (score >= threshold) return VERDICT.AI;
   if (score < 1 - threshold) return VERDICT.REAL;

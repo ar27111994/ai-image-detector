@@ -40,9 +40,11 @@ const CAMERA_FIELDS = [
 ];
 
 /**
+ * Analyze EXIF/XMP/IPTC metadata for camera fields + AI-generator software tags.
  * @param {ArrayBuffer|Uint8Array} buffer
- * @param {string} format
+ * @param {string} format container format from detectFormat() ('jpeg'|'webp'|'avif-or-bmff'|'png')
  * @returns {Promise<{ hasCameraFields: boolean|null, aiSignals: string[], software: string|null }>}
+ *   hasCameraFields: true/false when determinable, null when the format carries no EXIF
  */
 export async function analyzeExif(buffer, format) {
   if (!['jpeg', 'webp', 'avif-or-bmff', 'png'].includes(format)) {

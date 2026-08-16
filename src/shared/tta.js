@@ -15,6 +15,9 @@
  * @param {number} width  source image width (px)
  * @param {number} height source image height (px)
  * @param {number} inputSize model input edge (px)
+ * @param {object} [opts]
+ * @param {boolean} [opts.enableCropGrid] add a center/corner 50% crop grid (off by default —
+ *   measured to regress accuracy on the shipped SwinV2; enable only for patch-token models)
  * @returns {Array<{ sx: number, sy: number, sw: number, sh: number }>} source rects
  */
 export function computeViewRects(width, height, inputSize, { enableCropGrid = false } = {}) {

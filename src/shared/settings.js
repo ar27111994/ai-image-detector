@@ -11,7 +11,11 @@ const SETTINGS_LIMITS = Object.freeze({
   badgePosition: new Set(['top-left', 'top-right', 'bottom-left', 'bottom-right']),
 });
 
-/** Clamp/sanitize a settings object into a valid one. Pure — unit-tested. */
+/**
+ * Clamp/sanitize a settings object into a valid one. Pure — unit-tested.
+ * @param {object} [input] untrusted/partial settings (e.g. from chrome.storage or the UI)
+ * @returns {typeof DEFAULT_SETTINGS} a complete, in-range settings object
+ */
 export function sanitizeSettings(input) {
   const out = { ...DEFAULT_SETTINGS, ...(input ?? {}) };
   out.threshold = clampNumber(out.threshold, SETTINGS_LIMITS.threshold, DEFAULT_SETTINGS.threshold);
@@ -40,27 +44,42 @@ function clampNumber(value, { min, max }, fallback) {
   return Math.min(max, Math.max(min, n));
 }
 
-/** Load settings from chrome.storage.local (sanitized). */
+/**
+ * Load settings from chrome.storage.local (sanitized).
+ * @returns {Promise<typeof DEFAULT_SETTINGS>}
+ */
 export async function loadSettings() {
   const raw = await chrome.storage.local.get(STORAGE_KEYS.SETTINGS);
   return sanitizeSettings(raw[STORAGE_KEYS.SETTINGS]);
 }
 
-/** Persist settings (sanitized). Returns the sanitized object actually written. */
+/**
+ * Persist settings (sanitized).
+ * @param {object} settings untrusted settings to validate + write
+ * @returns {Promise<typeof DEFAULT_SETTINGS>} the sanitized object actually written
+ */
 export async function saveSettings(settings) {
   const clean = sanitizeSettings(settings);
   await chrome.storage.local.set({ [STORAGE_KEYS.SETTINGS]: clean });
   return clean;
 }
 
-/** Site enable/disable rules: { [hostname]: boolean }. */
+/**
+ * Site enable/disable rules.
+ * @returns {Promise<Record<string, boolean>>} map of hostname -> enabled
+ */
 export async function loadSiteRules() {
   const raw = await chrome.storage.local.get(STORAGE_KEYS.SITE_RULES);
   const rules = raw[STORAGE_KEYS.SITE_RULES];
   return rules && typeof rules === 'object' && !Array.isArray(rules) ? rules : {};
 }
 
-/** @param {string} hostname @param {boolean} enabled */
+/**
+ * Enable or disable scanning for a site.
+ * @param {string} hostname
+ * @param {boolean} enabled
+ * @returns {Promise<Record<string, boolean>>} the updated rules map
+ */
 export async function setSiteEnabled(hostname, enabled) {
   const rules = await loadSiteRules();
   rules[String(hostname)] = Boolean(enabled);
@@ -68,7 +87,11 @@ export async function setSiteEnabled(hostname, enabled) {
   return rules;
 }
 
-/** @param {string} hostname */
+/**
+ * Whether scanning is enabled for a site (default: enabled when no rule exists).
+ * @param {string} hostname
+ * @returns {Promise<boolean>}
+ */
 export async function isSiteEnabled(hostname) {
   const rules = await loadSiteRules();
   const value = rules[String(hostname)];

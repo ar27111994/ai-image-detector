@@ -5,12 +5,22 @@
 
 const PNG_MAGIC = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 
-/** Normalize an ArrayBuffer|Uint8Array to a Uint8Array view (no copy when already a view). */
+/**
+ * Normalize an ArrayBuffer|Uint8Array to a Uint8Array view (no copy when already a view).
+ * @param {ArrayBuffer|Uint8Array} buffer
+ * @returns {Uint8Array}
+ */
 export function bytesOf(buffer) {
   return buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
 }
 
-/** True if `bytes` starts with `magic` at `offset`. */
+/**
+ * True if `bytes` starts with `magic` at `offset`.
+ * @param {Uint8Array} bytes
+ * @param {number[]} magic
+ * @param {number} [offset]
+ * @returns {boolean}
+ */
 export function hasMagic(bytes, magic, offset = 0) {
   if (bytes.length < offset + magic.length) return false;
   for (let i = 0; i < magic.length; i++) {
@@ -19,7 +29,11 @@ export function hasMagic(bytes, magic, offset = 0) {
   return true;
 }
 
-/** Detect container format from magic bytes. */
+/**
+ * Detect container format from magic bytes.
+ * @param {ArrayBuffer|Uint8Array} buffer
+ * @returns {'png'|'jpeg'|'webp'|'gif'|'avif-or-bmff'|'unknown'}
+ */
 export function detectFormat(buffer) {
   const b = bytesOf(buffer);
   if (b.length < 12) return 'unknown';
@@ -34,7 +48,10 @@ export function detectFormat(buffer) {
 }
 
 /**
- * Parse PNG into chunks: [{ type, data(Uint8Array), offset }]. Stops at IEND or EOF.
+ * Parse PNG into chunks. Stops at IEND or EOF; bounds-checked (malformed input returns
+ * the chunks parsed so far, never throws).
+ * @param {ArrayBuffer|Uint8Array} buffer
+ * @returns {Array<{ type: string, data: Uint8Array, offset: number }>}
  */
 export function parsePngChunks(buffer) {
   const b = bytesOf(buffer);
@@ -55,7 +72,10 @@ export function parsePngChunks(buffer) {
 }
 
 /**
- * Parse JPEG into segments: [{ marker, name, data(Uint8Array) }]. Stops at SOS (scan data).
+ * Parse JPEG into segments. Stops at SOS (scan data); bounds-checked (malformed input returns
+ * the segments parsed so far, never throws).
+ * @param {ArrayBuffer|Uint8Array} buffer
+ * @returns {Array<{ marker: number, name: string, data: Uint8Array }>}
  */
 export function parseJpegSegments(buffer) {
   const b = bytesOf(buffer);
@@ -91,7 +111,9 @@ export function parseJpegSegments(buffer) {
 }
 
 /**
- * Parse WebP RIFF chunks: [{ fourcc, data(Uint8Array) }].
+ * Parse WebP RIFF chunks. Bounds-checked (malformed input returns the chunks parsed so far).
+ * @param {ArrayBuffer|Uint8Array} buffer
+ * @returns {Array<{ fourcc: string, data: Uint8Array }>}
  */
 export function parseWebpChunks(buffer) {
   const b = bytesOf(buffer);
@@ -111,7 +133,13 @@ export function parseWebpChunks(buffer) {
   return chunks;
 }
 
-/** Extract ASCII-ish printable strings from a byte range (for claim_generator scanning). */
+/**
+ * Extract ASCII-ish printable strings from a byte range (for claim_generator scanning).
+ * @param {ArrayBuffer|Uint8Array} data
+ * @param {number} [minLength] minimum run length to keep
+ * @param {number} [maxLength] per-string truncation cap
+ * @returns {string[]} printable substrings
+ */
 export function extractStrings(data, minLength = 4, maxLength = 256) {
   const b = bytesOf(data);
   const out = [];

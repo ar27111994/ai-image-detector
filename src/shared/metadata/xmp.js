@@ -27,7 +27,12 @@ const AI_CREATOR_TOOLS = [
   'dreamstudio',
 ];
 
-/** Extract raw XMP XML strings from image bytes (JPEG APP1 and/or WebP XMP chunk). */
+/**
+ * Extract raw XMP XML strings from image bytes (JPEG APP1 and/or WebP XMP chunk).
+ * @param {ArrayBuffer|Uint8Array} buffer
+ * @param {string} format 'jpeg' | 'webp' (others yield [])
+ * @returns {string[]} raw XMP XML packet strings
+ */
 export function extractXmpPackets(buffer, format) {
   const packets = [];
   if (format === 'jpeg') {

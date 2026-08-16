@@ -17,7 +17,10 @@ import { pickVariantForEp } from '../shared/model-variant.js';
 
 const MANIFEST_URL = 'models/manifest.json';
 
-/** @returns {Promise<object>} parsed model manifest (bundled resource) */
+/**
+ * Load the bundled model manifest.
+ * @returns {Promise<{ variants: Array<object> }>} parsed models/manifest.json
+ */
 export async function loadManifest() {
   const url = chrome.runtime.getURL(MANIFEST_URL);
   const res = await fetch(url);
@@ -25,7 +28,10 @@ export async function loadManifest() {
   return await res.json();
 }
 
-/** @returns {Promise<object>} persisted model state */
+/**
+ * Load the persisted model state (status/progress/error/variant).
+ * @returns {Promise<{ status: string, progress: number, downloadedBytes: number, totalBytes: number, error: string|null, ep: string|null, variant: string|null }>}
+ */
 export async function getModelState() {
   const raw = await chrome.storage.local.get(STORAGE_KEYS.MODEL_STATE);
   return (
@@ -47,7 +53,10 @@ async function setModelState(patch) {
   return state;
 }
 
-/** True when the required variant blob is present in IndexedDB. */
+/**
+ * True when the required variant blob is present in IndexedDB and state is 'ready'.
+ * @returns {Promise<boolean>}
+ */
 export async function isModelReady() {
   const state = await getModelState();
   if (state.status !== 'ready') return false;
@@ -61,6 +70,7 @@ export async function isModelReady() {
  *
  * @param {object} variantSpec manifest entry: { key, url, sha256, sizeBytes }
  * @param {(state:object) => void} [onProgress]
+ * @returns {Promise<{ key: string, bytes: number, verified: boolean }>}
  */
 export async function downloadVariant(variantSpec, onProgress) {
   const { key, url, sha256, sizeBytes } = variantSpec;
@@ -148,7 +158,12 @@ function broadcastProgress(state) {
   );
 }
 
-/** Load a model variant blob from IndexedDB (throws if absent). */
+/**
+ * Load a model variant blob from IndexedDB.
+ * @param {string} key
+ * @returns {Promise<Blob>}
+ * @throws when the variant is absent from the local store
+ */
 export async function loadVariantBlob(key) {
   const blob = await getModelBlob(key);
   if (!blob) throw new Error(`model variant '${key}' not found in local store`);
@@ -159,6 +174,8 @@ export async function loadVariantBlob(key) {
  * Try to load a model variant that was bundled into the extension package itself
  * (dist/models/<key>.onnx). Returns the verified Blob, or null when the package has no bundle.
  * Bundled copies are integrity-checked against the manifest pin exactly like downloads.
+ * @param {object} variant manifest variant ({ key, sha256, sizeBytes, ... })
+ * @returns {Promise<Blob|null>} the verified blob, or null when the package has no bundle
  */
 export async function loadBundledVariant(variant) {
   const url = chrome.runtime.getURL(`models/${variant.key}.onnx`);
@@ -175,7 +192,12 @@ export async function loadBundledVariant(variant) {
   }
 }
 
-/** Full setup: prefer a bundled copy (zero download); else download once and verify. */
+/**
+ * Full setup: prefer a bundled copy (zero download); else download once and verify.
+ * @param {string} epPreference 'webgpu' | 'wasm'
+ * @param {(state:object) => void} [onProgress]
+ * @returns {Promise<{ alreadyReady?: boolean, key?: string, bytes?: number, bundled?: boolean, verified?: boolean }>}
+ */
 export async function ensureModel(epPreference, onProgress) {
   if (await isModelReady()) return { alreadyReady: true };
   const manifest = await loadManifest();
@@ -203,6 +225,9 @@ export async function ensureModel(epPreference, onProgress) {
  * Choose the manifest variant for an execution-provider preference.
  * Delegates to the shared implementation so the service worker (download path) and the
  * offscreen document (load path) pick identical variants.
+ * @param {object} manifest models/manifest.json
+ * @param {string} epPreference 'webgpu' | 'wasm'
+ * @returns {object} the chosen variant
  */
 export function pickVariant(manifest, epPreference) {
   return pickVariantForEp(manifest, epPreference);

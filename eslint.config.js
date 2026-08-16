@@ -1,5 +1,6 @@
 import js from '@eslint/js';
 import prettier from 'eslint-config-prettier';
+import jsdoc from 'eslint-plugin-jsdoc';
 
 export default [
   {
@@ -65,6 +66,39 @@ export default [
       'no-var': 'error',
       'prefer-const': 'error',
       'no-throw-literal': 'error',
+    },
+  },
+  {
+    // Public-surface documentation gate (fails CI via `npm run lint`): every exported function/
+    // class/method in the shipped library must carry a JSDoc block, and every documented @param
+    // must have a name that matches the signature + a type. `npm run lint` uses
+    // --max-warnings=0 for the src tree, so even these warnings break the quality gate.
+    files: [
+      'src/shared/**/*.js',
+      'src/background/**/*.js',
+      'src/offscreen/**/*.js',
+      'src/content/**/*.js',
+    ],
+    plugins: { jsdoc },
+    rules: {
+      // Hard gate: an exported symbol with NO doc block is an error.
+      'jsdoc/require-jsdoc': [
+        'error',
+        {
+          publicOnly: true,
+          require: { FunctionDeclaration: true, MethodDefinition: true, ClassDeclaration: true },
+        },
+      ],
+      // Type/name accuracy on existing doc blocks (applies to any documented function). These
+      // are warnings — surfaced in `npm run lint` output and gated by --max-warnings=0 — so the
+      // internal-helper backlog is visible without blocking until it's cleaned up.
+      'jsdoc/require-param': 'warn',
+      'jsdoc/require-param-type': 'warn',
+      'jsdoc/require-returns': 'warn',
+      'jsdoc/require-returns-type': 'warn',
+      'jsdoc/check-param-names': 'warn',
+      'jsdoc/require-param-description': 'off', // prose quality stays a review concern
+      'jsdoc/require-returns-description': 'off',
     },
   },
   {

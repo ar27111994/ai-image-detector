@@ -17,7 +17,17 @@ import { detectXmpAiSignatures, extractXmpPackets } from './xmp.js';
 import { detectC2pa } from './c2pa.js';
 import { analyzeExif } from './exif.js';
 
-/** @param {ArrayBuffer|Uint8Array} bytes */
+/**
+ * Run all forensic/metadata detectors over image bytes.
+ * @param {ArrayBuffer|Uint8Array} bytes encoded image (jpeg/png/webp/gif/avif)
+ * @returns {Promise<{
+ *   format: string,
+ *   definitive: boolean,
+ *   score: number|null,
+ *   summary: string[],
+ *   features: { format: string, hasCameraExif: boolean|null, pngAiHit: boolean, xmpAiHit: boolean, c2paPresent: boolean, c2paHit: boolean, exifAiHit: boolean }
+ * }>}
+ */
 export async function extractForensicSignals(bytes) {
   const buffer =
     bytes instanceof Uint8Array

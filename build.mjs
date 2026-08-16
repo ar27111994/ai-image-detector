@@ -142,12 +142,90 @@ async function run() {
   }
 
   const results = await Promise.all(buildConfigs().map((cfg) => build(cfg)));
+  await assertContentScriptIsIife();
   const files = await readdir(distDir);
   console.log(`[build] dist/ written: ${files.join(', ')}`);
   if (results.some((r) => r.errors.length > 0)) process.exitCode = 1;
 }
 
-run().catch((err) => {
-  console.error('[build] failed:', err);
-  process.exitCode = 1;
-});
+/**
+ * Fail the build if dist/content.js is not a classic-script (IIFE) bundle. Content scripts run
+ * in the page's classic-script world — a top-level ESM import/export would be a SyntaxError
+ * there. This scans *outside* strings/comments (so a mention of the word inside a string or
+ * comment never false-positives) for a top-level `import`/`export` statement.
+ */
+async function assertContentScriptIsIife() {
+  const src = await readFile(path.join(distDir, 'content.js'), 'utf8');
+  if (hasTopLevelEsm(src)) {
+    throw new Error(
+      'dist/content.js contains a top-level import/export — content scripts must be IIFE ' +
+        '(esbuild format "iife"). Check buildConfigs() format for the content entry.',
+    );
+  }
+}
+
+/**
+ * Scan source for a top-level `import`/`export` keyword while skipping string literals,
+ * template literals, and line/block comments. Depth-0 (top-level) occurrences only.
+ * @param {string} src
+ * @returns {boolean} true if a top-level ESM statement is present
+ */
+export function hasTopLevelEsm(src) {
+  let depth = 0;
+  let i = 0;
+  const n = src.length;
+  // State machine over: code, line comment, block comment, single/double-quoted string,
+  // template literal. Only inspect tokens at brace/paren/bracket depth 0 in "code" state.
+  while (i < n) {
+    const c = src[i];
+    const next = src[i + 1];
+    // Comments
+    if (c === '/' && next === '/') {
+      while (i < n && src[i] !== '\n') i++;
+      continue;
+    }
+    if (c === '/' && next === '*') {
+      i += 2;
+      while (i < n && !(src[i] === '*' && src[i + 1] === '/')) i++;
+      i += 2;
+      continue;
+    }
+    // Strings / template literals (skip to their end, honoring escapes)
+    if (c === "'" || c === '"' || c === '`') {
+      const quote = c;
+      i++;
+      while (i < n && src[i] !== quote) {
+        if (src[i] === '\\') i++;
+        i++;
+      }
+      i++;
+      continue;
+    }
+    if (c === '{' || c === '(' || c === '[') depth++;
+    else if (c === '}' || c === ')' || c === ']') depth = Math.max(0, depth - 1);
+    // Top-level keyword check (word-boundary so 'imported'/'myexport' don't match).
+    else if (depth === 0 && /[A-Za-z]/.test(c)) {
+      const rest = src.slice(i);
+      const m = rest.match(/^(import|export)\b/);
+      if (m) {
+        // Allow `export {};`/`export {}`? No — that is still ESM and forbidden in classic scripts.
+        // Any top-level import/export statement means the bundle is ESM, not IIFE.
+        return true;
+      }
+      // Skip past this identifier/keyword.
+      const word = rest.match(/^[A-Za-z_$][A-Za-z0-9_$]*/);
+      i += word ? word[0].length : 1;
+      continue;
+    }
+    i++;
+  }
+  return false;
+}
+
+// Only auto-run when executed directly (not when imported by tests for the validator).
+if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+  run().catch((err) => {
+    console.error('[build] failed:', err);
+    process.exitCode = 1;
+  });
+}

@@ -2,7 +2,11 @@
  * Deterministic PRNG (mulberry32) used for reproducible benchmark sampling.
  */
 
-/** @param {number} seed */
+/**
+ * Create a deterministic PRNG (mulberry32) for reproducible benchmark sampling.
+ * @param {number} seed
+ * @returns {() => number} a function returning the next float in [0, 1)
+ */
 export function createRng(seed) {
   let state = seed >>> 0;
   return function next() {

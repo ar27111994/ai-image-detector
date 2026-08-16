@@ -124,10 +124,9 @@ jobs:
           foreach ($prop in $m.icons.PSObject.Properties) {
             if (-not (Test-Path "dist/$($prop.Value)")) { throw "declared icon missing: $($prop.Value)" }
           }
-          # Content script must be IIFE (no top-level ESM import/export) — classic-script world.
-          $cs = Get-Content dist/content.js -Raw
-          if ($cs -match '(?m)^\s*(import|export)\s') { throw 'dist/content.js contains ESM syntax (must be IIFE)' }
-          Write-Host 'manifest schema + content-script format OK'
+          # Content-script IIFE format is enforced at build time by build.mjs
+          # (assertContentScriptIsIife, a string/comment-aware scanner) — no CI regex needed.
+          Write-Host 'manifest schema OK'
       - name: Verify bundled model manifest pins a SHA-256
         shell: pwsh
         run: |

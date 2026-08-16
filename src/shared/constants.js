@@ -111,5 +111,5 @@ export const TIMEOUTS = Object.freeze({
   OBSERVER_DEBOUNCE_MS: 400,
 });
 
-/** Hard safety cap on a single fetched image's byte size (32 MiB). */
+/** Hard safety cap (bytes) on a single fetched image — larger images are rejected before decode. */
 export const MAX_IMAGE_BYTES = 32 * 1024 * 1024;

@@ -13,7 +13,7 @@ import * as ort from 'onnxruntime-web';
 import { preprocessRgba } from '../shared/preprocess.js';
 import { getModelBlob } from '../shared/model-store.js';
 import { computeViewRects, meanLogits } from '../shared/tta.js';
-import { clamp01 } from '../shared/math.js';
+import { clamp01, softmaxProbability } from '../shared/math.js';
 import { TIMEOUTS } from '../shared/constants.js';
 
 /** Ordered EP preference; wasm is the guaranteed fallback. */
@@ -28,7 +28,10 @@ let activeSpec = null;
 let activeEp = null;
 let initPromise = null;
 
-/** Point ORT at the vendored, version-locked wasm files. Must run before any session create. */
+/**
+ * Point ORT at the vendored, version-locked wasm files. Must run before any session create.
+ * Idempotent. @returns {void}
+ */
 export function configureOrt() {
   if (configured) return;
   const base = chrome.runtime.getURL('vendor/');
@@ -179,6 +182,13 @@ export async function analyzeImageBytes(bytes) {
 /**
  * Render one source rect of the bitmap to the model input and return raw logits (NOT softmaxed).
  * Callers average logits across views, then map to a probability once via scoreFromOutput.
+ * @param {ImageBitmap} bitmap decoded source image
+ * @param {number} sx source-rect x
+ * @param {number} sy source-rect y
+ * @param {number} sw source-rect width
+ * @param {number} sh source-rect height
+ * @param {number} size model input edge (px)
+ * @returns {Promise<number[]>} raw logits
  */
 async function inferViewLogits(bitmap, sx, sy, sw, sh, size) {
   if (!session || !activeSpec) throw new Error('inference session not initialized');
@@ -195,25 +205,22 @@ async function inferViewLogits(bitmap, sx, sy, sw, sh, size) {
 
 /**
  * Map raw model output to an AI-probability score using the model's declared semantics.
- * @param {number[]} output
- * @param {object} spec
+ * @param {number[]} output raw model output (logits or a calibrated p_real scalar)
+ * @param {object} spec model variant spec ({ outputType?, aiLogitIndex? })
+ * @returns {number} AI probability in [0, 1]
  */
 export function scoreFromOutput(output, spec) {
   if (spec.outputType === 'p_real') {
     return clamp01(1 - output[0]);
   }
-  // 2-class logits; softmax the AI index.
-  const aiIdx = spec.aiLogitIndex ?? 1;
-  const otherIdx = aiIdx === 0 ? 1 : 0;
-  const a = output[aiIdx];
-  const b = output[otherIdx];
-  const m = Math.max(a, b);
-  const ea = Math.exp(a - m);
-  const eb = Math.exp(b - m);
-  return clamp01(ea / (ea + eb));
+  // 2-class logits; softmax the AI index (shared, numerically-stable implementation).
+  return clamp01(softmaxProbability(output, spec.aiLogitIndex ?? 1));
 }
 
-/** Current engine status (for diagnostics / popup). */
+/**
+ * Current engine status (for diagnostics / popup).
+ * @returns {{ initialized: boolean, ep: string|null, variant: string|null, inputSize: number|null }}
+ */
 export function engineStatus() {
   return {
     initialized: Boolean(session),
@@ -223,7 +230,10 @@ export function engineStatus() {
   };
 }
 
-/** Release the session (used when resetting or switching models). */
+/**
+ * Release the session (used when resetting or switching models). Safe to call when no session
+ * is loaded. @returns {Promise<void>}
+ */
 export async function unloadSession() {
   if (session) {
     try {

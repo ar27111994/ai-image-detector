@@ -29,7 +29,11 @@ const AI_SOFTWARE = [
   'fooocus',
 ];
 
-/** Decode a tEXt chunk: keyword\x00value (latin-1). */
+/**
+ * Decode a tEXt chunk: keyword\x00value (latin-1).
+ * @param {Uint8Array} data
+ * @returns {{ key: string, value: string }|null} null when malformed
+ */
 function decodeText(data) {
   const nullIdx = data.indexOf(0);
   if (nullIdx === -1) return null;
@@ -45,7 +49,11 @@ async function inflate(data) {
   return new Uint8Array(buf);
 }
 
-/** Decode a zTXt chunk: keyword\x00 compression_method(1) compressed_value */
+/**
+ * Decode a zTXt chunk: keyword\x00 compression_method(1) compressed_value
+ * @param {Uint8Array} data
+ * @returns {Promise<{ key: string, value: string|null }|null>} null when malformed
+ */
 async function decodeZtxt(data) {
   const nullIdx = data.indexOf(0);
   if (nullIdx === -1) return null;
@@ -56,7 +64,11 @@ async function decodeZtxt(data) {
   return { key, value: new TextDecoder('latin1').decode(inflated) };
 }
 
-/** Decode an iTXt chunk (utf-8, optional compression). */
+/**
+ * Decode an iTXt chunk (utf-8, optional compression).
+ * @param {Uint8Array} data
+ * @returns {Promise<{ key: string, value: string|null }|null>} null when malformed
+ */
 async function decodeItxt(data) {
   let i = 0;
   const readNull = () => {
@@ -86,8 +98,10 @@ async function decodeItxt(data) {
 }
 
 /**
- * Extract all textual chunks from PNG bytes.
- * @returns {Promise<Array<{ key: string, value: string|null }>>}
+ * Extract all textual chunks (tEXt / iTXt / zTXt) from PNG bytes.
+ * @param {ArrayBuffer|Uint8Array} buffer
+ * @returns {Promise<Array<{ key: string, value: string|null }>>} key/value pairs (corrupt
+ *   chunks are skipped, never thrown)
  */
 export async function extractPngText(buffer) {
   const chunks = parsePngChunks(buffer);

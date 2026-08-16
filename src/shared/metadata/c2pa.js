@@ -45,7 +45,11 @@ function containsBytes(haystack, needle) {
   return false;
 }
 
-/** JPEG: APP11 segments with "JP" discriminator carry JUMBF (C2PA). */
+/**
+ * JPEG: APP11 segments with "JP" discriminator carry JUMBF (C2PA).
+ * @param {ArrayBuffer|Uint8Array} buffer
+ * @returns {Uint8Array[]} candidate C2PA manifest blobs
+ */
 function findJpegC2pa(buffer) {
   const blobs = [];
   for (const seg of parseJpegSegments(buffer)) {
@@ -57,14 +61,22 @@ function findJpegC2pa(buffer) {
   return blobs;
 }
 
-/** PNG: caBX chunk carries the JUMBF manifest store. */
+/**
+ * PNG: caBX chunk carries the JUMBF manifest store.
+ * @param {ArrayBuffer|Uint8Array} buffer
+ * @returns {Uint8Array[]} candidate C2PA manifest blobs
+ */
 function findPngC2pa(buffer) {
   return parsePngChunks(buffer)
     .filter((c) => c.type === 'caBX')
     .map((c) => c.data);
 }
 
-/** WebP: RIFF chunk fourcc 'C2PA'. */
+/**
+ * WebP: RIFF chunk fourcc 'C2PA'.
+ * @param {ArrayBuffer|Uint8Array} buffer
+ * @returns {Uint8Array[]} candidate C2PA manifest blobs
+ */
 function findWebpC2pa(buffer) {
   return parseWebpChunks(buffer)
     .filter((c) => c.fourcc === 'C2PA')
@@ -73,7 +85,10 @@ function findWebpC2pa(buffer) {
 
 /**
  * Detect C2PA manifests and extract provenance signals.
+ * @param {ArrayBuffer|Uint8Array} buffer
+ * @param {string} format 'jpeg' | 'png' | 'webp' (others yield no blobs)
  * @returns {{ present: boolean, hit: boolean, signals: string[], generators: string[] }}
+ *   present = a C2PA manifest exists; hit = it names a known AI generator
  */
 export function detectC2pa(buffer, format) {
   let blobs = [];

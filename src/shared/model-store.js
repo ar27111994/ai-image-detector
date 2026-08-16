@@ -53,7 +53,12 @@ function tx(db, mode, fn) {
   );
 }
 
-/** @param {string} key @param {Blob} blob */
+/**
+ * Store a model weight blob (overwrites any existing entry under `key`).
+ * @param {string} key
+ * @param {Blob} blob
+ * @returns {Promise<void>}
+ */
 export async function putModelBlob(key, blob) {
   const db = await openDb();
   try {
@@ -63,7 +68,11 @@ export async function putModelBlob(key, blob) {
   }
 }
 
-/** @param {string} key @returns {Promise<Blob|undefined>} */
+/**
+ * Load a model weight blob.
+ * @param {string} key
+ * @returns {Promise<Blob|undefined>} the blob, or undefined when absent
+ */
 export async function getModelBlob(key) {
   const db = await openDb();
   try {
@@ -81,7 +90,11 @@ export async function getModelBlob(key) {
   }
 }
 
-/** @param {string} key */
+/**
+ * Delete a model weight blob.
+ * @param {string} key
+ * @returns {Promise<void>}
+ */
 export async function deleteModelBlob(key) {
   const db = await openDb();
   try {
@@ -91,7 +104,10 @@ export async function deleteModelBlob(key) {
   }
 }
 
-/** @returns {Promise<string[]>} all stored model keys */
+/**
+ * List all stored model keys.
+ * @returns {Promise<string[]>}
+ */
 export async function listModelKeys() {
   const db = await openDb();
   try {

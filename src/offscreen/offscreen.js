@@ -16,11 +16,20 @@ import { fuseSignals } from '../shared/fusion/fuse.js';
 
 const OFFSCREEN_TARGET = 'offscreen';
 
-/** Adapter: the engine wants an async (ep) => variant picker bound to this manifest. */
+/**
+ * Adapter: the engine wants an async (ep) => variant picker bound to this manifest.
+ * @param {object} manifest models/manifest.json
+ * @returns {(ep: string) => Promise<object>} variant picker for the engine
+ */
 function pickVariantFor(manifest) {
   return async (ep) => pickVariantForEp(manifest, ep);
 }
 
+/**
+ * Warm the inference session for the given manifest and report engine status.
+ * @param {object} payload message payload ({ manifest })
+ * @returns {Promise<object>} session status + engine status
+ */
 async function ensureReady(payload) {
   const { manifest } = payload;
   const status = await engine.loadSession(manifest, pickVariantFor(manifest));

@@ -14,7 +14,11 @@ import { TIMEOUTS } from './constants.js';
 
 let counter = 0;
 
-/** Generate a collision-safe request id (time + counter + random, no crypto needed). */
+/**
+ * Generate a collision-safe request id (time + counter + random, no crypto needed).
+ * @param {string} [prefix]
+ * @returns {string} unique request id
+ */
 export function nextId(prefix = 'req') {
   counter = (counter + 1) % 0xffff;
   return `${prefix}-${Date.now().toString(36)}-${counter.toString(36)}-${Math.floor(
@@ -22,22 +26,43 @@ export function nextId(prefix = 'req') {
   ).toString(36)}`;
 }
 
-/** @param {string} type @param {object} payload @param {string|null} target */
+/**
+ * Build a request envelope.
+ * @param {string} type one of MSG
+ * @param {object} payload message-specific data
+ * @param {string|null} target 'offscreen' | 'background' | 'content' | null (broadcast)
+ * @returns {{ id: string, type: string, target: string|null, payload: object }}
+ */
 export function makeRequest(type, payload = {}, target = null) {
   return { id: nextId(type), type, target, payload };
 }
 
-/** @param {object} request @param {*} result */
+/**
+ * Build a success response envelope echoing the request id.
+ * @param {object} request
+ * @param {*} result
+ * @returns {{ id: string, ok: true, result: * }}
+ */
 export function makeOk(request, result) {
   return { id: request?.id, ok: true, result };
 }
 
-/** @param {object} request @param {string} message @param {string} [code] */
+/**
+ * Build an error response envelope echoing the request id.
+ * @param {object} request
+ * @param {string} message
+ * @param {string} [code]
+ * @returns {{ id: string, ok: false, error: { message: string, code: string } }}
+ */
 export function makeError(request, message, code = 'INTERNAL') {
   return { id: request?.id, ok: false, error: { message: String(message), code } };
 }
 
-/** True if `msg` is a well-formed request envelope. */
+/**
+ * True if `msg` is a well-formed request envelope.
+ * @param {*} msg
+ * @returns {boolean}
+ */
 export function isRequest(msg) {
   return (
     msg != null &&
@@ -48,7 +73,11 @@ export function isRequest(msg) {
   );
 }
 
-/** True if `msg` is a well-formed response envelope. */
+/**
+ * True if `msg` is a well-formed response envelope.
+ * @param {*} msg
+ * @returns {boolean}
+ */
 export function isResponse(msg) {
   return msg != null && typeof msg === 'object' && typeof msg.ok === 'boolean' && 'id' in msg;
 }
@@ -59,6 +88,7 @@ export function isResponse(msg) {
  *
  * @param {object} message
  * @param {{ timeoutMs?: number }} [opts]
+ * @returns {Promise<object>} the response envelope
  */
 export async function sendRequest(message, { timeoutMs = TIMEOUTS.MESSAGE_MS } = {}) {
   return await withTimeout(chrome.runtime.sendMessage(message), timeoutMs, message.type);
@@ -66,7 +96,11 @@ export async function sendRequest(message, { timeoutMs = TIMEOUTS.MESSAGE_MS } =
 
 /**
  * Wrap a promise with a timeout. Rejects { code:'TIMEOUT' } on expiry.
- * @param {Promise} promise @param {number} ms @param {string} label
+ * @template T
+ * @param {Promise<T>} promise
+ * @param {number} ms timeout in milliseconds
+ * @param {string} label used in the timeout error message
+ * @returns {Promise<T>}
  */
 export function withTimeout(promise, ms, label = 'operation') {
   return new Promise((resolve, reject) => {

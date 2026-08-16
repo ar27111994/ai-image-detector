@@ -32,7 +32,14 @@ export function extractSpectralFeatures(rgba, width, height) {
   return radialFeatures(power, size);
 }
 
-/** Center-crop to a square and convert to normalized grayscale (0..1). */
+/**
+ * Center-crop to a square and convert to normalized grayscale (0..1).
+ * @param {Uint8ClampedArray|Uint8Array} rgba RGBA interleaved, length width*height*4
+ * @param {number} width
+ * @param {number} height
+ * @param {number} size output square edge (px)
+ * @returns {{ gray: Float32Array, size: number }}
+ */
 function centerCropGrayscale(rgba, width, height, size) {
   const out = new Float32Array(size * size);
   const cx = Math.floor(width / 2);
@@ -51,7 +58,12 @@ function centerCropGrayscale(rgba, width, height, size) {
   return { gray: out, size };
 }
 
-/** 2D power spectrum (|FFT|^2) with fft.js: 1D FFT per row then per column. */
+/**
+ * 2D power spectrum (|FFT|^2) with fft.js: 1D FFT per row then per column.
+ * @param {Float32Array} gray grayscale plane (size*size)
+ * @param {number} size square edge (px)
+ * @returns {Float32Array} power spectrum (size*size)
+ */
 function fft2Power(gray, size) {
   const f = getFft(size);
   const rowOut = f.createComplexArray();
@@ -88,7 +100,12 @@ function fft2Power(gray, size) {
   return spectrum;
 }
 
-/** Azimuthal-average the power spectrum into log-spaced radial bins + summary stats. */
+/**
+ * Azimuthal-average the power spectrum into log-spaced radial bins + summary stats.
+ * @param {Float32Array} power power spectrum (size*size)
+ * @param {number} size square edge (px)
+ * @returns {{ radialSpectrum: number[], highFreqRatio: number, spectralPeakRatio: number, peakBin: number }}
+ */
 function radialFeatures(power, size) {
   const center = size / 2;
   const maxR = size / 2;

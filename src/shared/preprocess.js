@@ -110,6 +110,7 @@ export function rgbaToChwTensor(
  * @param {number} spec.inputSize
  * @param {number[]} [spec.mean]
  * @param {number[]} [spec.std]
+ * @returns {{ data: Float32Array, dims: [1, 3, number, number] }}
  */
 export function preprocessRgba(rgba, width, height, spec) {
   const size = spec.inputSize;

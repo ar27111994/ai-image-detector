@@ -69,6 +69,9 @@ If you add a dynamic number to a doc, wrap it in an `AUTO:` marker and add its c
 - **Code style**: vanilla ES2022 modules, Prettier + ESLint enforced. Follow the existing
   structure: `src/shared/` (pure, unit-tested), `src/background/` (service worker orchestration),
   `src/offscreen/` (inference), `src/content/` (page UX), `src/{popup,options,onboarding}/` (pages).
+- **Documentation**: every exported function/class in `src/` must have a JSDoc block with typed
+  `@param`/`@returns`. Enforced by `eslint-plugin-jsdoc` — `npm run lint` runs with
+  `--max-warnings=0`, so a missing/typed-less doc block fails the quality gate in CI.
 - **Design system**: UI styling uses tokens from `extension/pages/tokens.css` — no hardcoded
   hex/px values in component stylesheets.
 - **Commits**: [Conventional Commits](https://www.conventionalcommits.org/) (e.g.

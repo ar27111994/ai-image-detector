@@ -83,7 +83,9 @@ async function ensureOffscreenDocument() {
 
 /**
  * Force-recreate the offscreen document after a suspected crash/stale context. Closes any
- * existing (unresponsive) document first so the next ensure-offscreen call starts clean.
+ * existing (unresponsive) document first, then drops the cached manifest + session guards so the
+ * next ensure-offscreen/warm-up starts completely fresh (a crashed document may have been serving
+ * a stale manifest, and a rejected in-flight init promise must never be reused).
  * Closing a healthy document is safe — the next request just recreates it.
  */
 async function recreateOffscreenDocument() {
@@ -93,18 +95,20 @@ async function recreateOffscreenDocument() {
   } catch {
     /* no document to close — fine */
   }
-  // Re-verify none remains, then drop the cached-manifest/session guards so a fresh create
-  // + warm-up happens on the next ensure call.
-  const existing = await chrome.runtime
+  // Drop cached session state so the retry does a genuinely fresh warm-up.
+  cachedManifest = null;
+  initializingSession = null;
+  // Re-verify none remains (best-effort; a lingering entry just means the next create is a no-op).
+  await chrome.runtime
     .getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'], documentUrls: [url] })
     .catch(() => []);
-  if (existing.length === 0) return;
 }
 
 /**
  * Warm the inference session inside the offscreen document (idempotent; dedupes concurrent
  * calls). If the warm-up fails because the offscreen document is gone or unresponsive (e.g. it
  * was killed), the document is recreated once and the warm-up retried before surfacing the error.
+ * @returns {Promise<object>} the offscreen session status ({ ep, variant, warmMs, engine })
  */
 async function ensureInferenceReady() {
   if (!(await modelManager.isModelReady())) {
@@ -117,15 +121,20 @@ async function ensureInferenceReady() {
   try {
     return await warmSession();
   } catch (err) {
-    // Recover from a crashed/stale offscreen document once: recreate + warm again.
+    // Recover from a crashed/stale offscreen document once: recreate (which also clears the
+    // cached manifest + any rejected in-flight init) + warm again before surfacing the error.
     console.warn('[ai-detector] inference warm-up failed, recreating offscreen doc:', err?.message);
     await recreateOffscreenDocument();
     await ensureOffscreenDocument();
+    cachedManifest = await modelManager.loadManifest();
     return await warmSession();
   }
 }
 
-/** Single warm-up attempt (dedupes concurrent callers via initializingSession). */
+/**
+ * Single warm-up attempt (dedupes concurrent callers via initializingSession).
+ * @returns {Promise<object>} the offscreen session status
+ */
 async function warmSession() {
   if (initializingSession) return await initializingSession;
   initializingSession = sendRequest(
@@ -153,6 +162,11 @@ async function warmSession() {
 
 /* ------------------------------- image fetching ------------------------------- */
 
+/**
+ * Fetch cross-origin image bytes (host_permissions bypass page CORS), bounded by MAX_IMAGE_BYTES.
+ * @param {string} url
+ * @returns {Promise<ArrayBuffer>} the image bytes
+ */
 async function fetchImageBytes(url) {
   const response = await fetch(url, { credentials: 'omit', cache: 'force-cache' });
   if (!response.ok) throw new Error(`image fetch failed: HTTP ${response.status}`);
@@ -168,6 +182,8 @@ async function fetchImageBytes(url) {
 /**
  * Only accept messages from this extension's own contexts (content scripts, pages, offscreen).
  * External pages/other extensions cannot drive analysis or mutate state.
+ * @param {chrome.runtime.MessageSender} sender
+ * @returns {boolean} true if the sender is one of this extension's own contexts
  */
 function isExtensionContext(sender) {
   if (!sender) return false;

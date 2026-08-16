@@ -13,9 +13,14 @@
  * Dedup is by resolved URL; data:/blob: URLs are relayed as bytes instead of refetched.
  */
 
+/** Data attribute used to stash an element's resolved source URL (for dedup + fan-out). */
 const IMAGE_SRC_ATTR = 'data-aid-src';
 
-/** Best candidate URL from a srcset string (highest descriptor value). */
+/**
+ * Best candidate URL from a srcset string (highest descriptor value).
+ * @param {string|null} srcset
+ * @returns {string|null} the highest-resolution candidate URL, or null
+ */
 export function bestFromSrcset(srcset) {
   if (!srcset) return null;
   let best = null;
@@ -35,7 +40,11 @@ export function bestFromSrcset(srcset) {
   return best;
 }
 
-/** Resolve a possibly-relative URL against the page. */
+/**
+ * Resolve a possibly-relative URL against the page.
+ * @param {string} url
+ * @returns {string|null} absolute URL, or null if unparseable
+ */
 export function resolveUrl(url) {
   try {
     return new URL(url, location.href).href;
@@ -44,7 +53,12 @@ export function resolveUrl(url) {
   }
 }
 
-/** Extract the URL to analyze for a given element, or null. */
+/**
+ * Extract the URL to analyze for a given element (img/srcset/source/input-image/video-poster/
+ * background-image), or null when the element carries no analyzable image.
+ * @param {Element} el
+ * @returns {string|null} absolute URL
+ */
 export function urlForElement(el) {
   if (!(el instanceof Element)) return null;
   const tag = el.tagName;
@@ -70,13 +84,22 @@ export function urlForElement(el) {
   return null;
 }
 
-/** Visible (layout) size of an element. */
+/**
+ * Visible (layout) size of an element.
+ * @param {Element} el
+ * @returns {{ width: number, height: number }}
+ */
 export function elementSize(el) {
   const rect = el.getBoundingClientRect();
   return { width: rect.width, height: rect.height };
 }
 
-/** True if the element is large enough to bother analyzing. */
+/**
+ * True if the element is large enough to bother analyzing.
+ * @param {Element} el
+ * @param {number} minSize minimum dimension (CSS px)
+ * @returns {boolean}
+ */
 export function meetsMinSize(el, minSize) {
   const { width, height } = elementSize(el);
   return Math.min(width, height) >= minSize;
@@ -101,7 +124,12 @@ export function discoverImages(root = document) {
   return [...found];
 }
 
-/** Find elements with CSS background-image under root (bounded scan). */
+/**
+ * Find elements with a CSS background-image under root (bounded scan).
+ * @param {ParentNode} root
+ * @param {number} maxScan cap on elements walked (perf bound on huge pages)
+ * @returns {Element[]}
+ */
 export function discoverBackgroundImages(root = document, maxScan = 5000) {
   const out = [];
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);

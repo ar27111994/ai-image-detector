@@ -13,7 +13,7 @@
 
 ## Test counts
 
-<!-- AUTO:TEST_COUNT -->268<!-- /AUTO:TEST_COUNT --> tests across <!-- AUTO:TEST_FILES -->32<!-- /AUTO:TEST_FILES --> files (unit + integration), plus 6 e2e cases in real Chrome.
+<!-- AUTO:TEST_COUNT -->279<!-- /AUTO:TEST_COUNT --> tests across <!-- AUTO:TEST_FILES -->33<!-- /AUTO:TEST_FILES --> files (unit + integration), plus 6 e2e cases in real Chrome.
 
 > Test counts, coverage %, and benchmark accuracy in the docs are auto-synced from the source of
 > truth via `npm run docs:sync` (see CONTRIBUTING.md). The `test` CI job fails if they drift
@@ -21,19 +21,20 @@
 
 ## Coverage policy
 
-The enforced 90% floor covers the pure, platform-independent logic (`src/shared/**`) plus the
-model manager (`src/background/model-manager.js`) — currently
+The enforced **80% floor** (lines/branches/functions/statements) spans **all of `src/`** —
+currently
 
-<!-- AUTO:COV_LINES -->97.0<!-- /AUTO:COV_LINES --> lines /
-<!-- AUTO:COV_BRANCHES -->91.3<!-- /AUTO:COV_BRANCHES --> branches /
-<!-- AUTO:COV_FUNCS -->93.1<!-- /AUTO:COV_FUNCS --> functions.
+<!-- AUTO:COV_LINES -->87.1<!-- /AUTO:COV_LINES --> lines /
+<!-- AUTO:COV_BRANCHES -->83.1<!-- /AUTO:COV_BRANCHES --> branches /
+<!-- AUTO:COV_FUNCS -->84.7<!-- /AUTO:COV_FUNCS --> functions.
 
-The runtime/UI modules (service-worker router, offscreen orchestrator, content script, and the
-popup/options/onboarding pages) now have dedicated **unit** suites built on a shared DOM/chrome
-stub (`tests/helpers/dom-stub.js`), in addition to the integration (mock-chrome) and e2e suites.
-Those modules are intentionally excluded from the _coverage gate_ — the stub proves behavior but
-isn't the real Chrome canvas/WebGPU environment, so we gate on the pure logic and assert runtime
-behavior via the unit + e2e suites instead of a misleading line percentage.
+Breakdown: the pure, platform-independent logic (`src/shared/**`, `src/background/model-manager.js`)
+sits at 90–100% per file. The runtime/UI modules (service-worker router, offscreen orchestrator,
+content script, popup/options/onboarding pages) have dedicated unit suites built on a shared
+DOM/chrome stub (`tests/helpers/dom-stub.js`), plus the integration (mock-chrome) and e2e suites.
+The one deliberately-lower file is `src/offscreen/inference-engine.js` — its ORT session lifecycle
+(WebGPU probe, WASM fallback, live inference) genuinely requires a browser and is covered by the e2e
+suite instead, so the 80% floor keeps the gate honest without gaming it.
 
 ## CI gates
 

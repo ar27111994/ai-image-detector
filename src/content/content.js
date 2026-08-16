@@ -182,6 +182,9 @@ async function analyze({ el, url }) {
  * Route one image to the right analysis path. blob:/data: URLs cannot be fetched from the
  * service worker (blob: is scoped to the creating document), so we read the bytes in the page
  * context and relay them via ANALYZE_IMAGE_BYTES.
+ * @param {Element} el
+ * @param {string} url
+ * @returns {Promise<object>} the analysis response envelope
  */
 async function analyzeOne(el, url) {
   if (url.startsWith('blob:') || url.startsWith('data:')) {
@@ -203,6 +206,9 @@ async function analyzeOne(el, url) {
 /**
  * Read an image's bytes in the page context (blob:/data: URLs are same-document reachable).
  * Returns a plain { data: number[] } (structured-clone safe) or null on failure.
+ * @param {Element} el
+ * @param {string} url
+ * @returns {Promise<{ data: number[] }|null>}
  */
 async function readElementBytes(el, url) {
   try {

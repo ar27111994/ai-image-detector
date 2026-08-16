@@ -33,9 +33,10 @@ const POSITION_STYLES = {
 
 /**
  * Attach or update a badge on an image element.
- * @param {Element} el
- * @param {{ score: number|null, verdict: string, reasons?: string[], cached?: boolean, ep?: string, latencyMs?: number, neuralScore?: number }} result
- * @param {{ position?: string, show?: boolean }} [opts]
+ * @param {Element} el the image to badge
+ * @param {{ score: number|null, verdict: string, reasons?: string[], cached?: boolean, ep?: string, latencyMs?: number, neuralScore?: number }} result analysis result
+ * @param {{ position?: string, show?: boolean }} [opts] position = badge corner; show=false removes the badge
+ * @returns {void}
  */
 export function setBadge(el, result, opts = {}) {
   if (!opts.show) {
@@ -69,7 +70,11 @@ export function setBadge(el, result, opts = {}) {
   );
 }
 
-/** Remove a badge if present. */
+/**
+ * Remove a badge (and its observers) if present.
+ * @param {Element} el
+ * @returns {void}
+ */
 export function removeBadge(el) {
   const host = findBadgeHost(el);
   if (host) host.remove();
@@ -107,7 +112,11 @@ function badgeStyle(colors, position) {
   ].join('');
 }
 
-/** The badge host is an absolutely-positioned span placed relative to the image. */
+/**
+ * The badge host is an absolutely-positioned span placed relative to the image.
+ * @param {Element} el
+ * @returns {HTMLElement|null} the badge host element (shadow root attached), or null
+ */
 function ensureBadgeHost(el) {
   const existing = findBadgeHost(el);
   if (existing) return existing;
@@ -182,16 +191,27 @@ function togglePanel(shadow, badge) {
   panel.className = 'badge-panel';
   panel.setAttribute('role', 'dialog');
   panel.setAttribute('aria-label', 'Detection details');
-  const rows = [];
-  if (data.score != null)
-    rows.push(`<dt>AI confidence</dt><dd>${Math.round(data.score * 100)}%</dd>`);
-  if (data.verdict) rows.push(`<dt>Verdict</dt><dd>${escapeHtml(String(data.verdict))}</dd>`);
-  if (data.ep) rows.push(`<dt>Engine</dt><dd>${escapeHtml(String(data.ep))}</dd>`);
-  if (data.latencyMs != null) rows.push(`<dt>Latency</dt><dd>${data.latencyMs} ms</dd>`);
-  if (data.reasons?.length) {
-    rows.push(`<dt>Signals</dt><dd>${data.reasons.map(escapeHtml).join('<br>')}</dd>`);
-  }
-  panel.innerHTML = `<h3>Detection details</h3><dl>${rows.join('')}</dl>`;
+
+  // Built with DOM + textContent (never innerHTML) so forensic metadata strings — which are
+  // attacker-controlled via crafted image EXIF/XMP/PNG text — can never inject markup.
+  const title = document.createElement('h3');
+  title.textContent = 'Detection details';
+  panel.appendChild(title);
+  const dl = document.createElement('dl');
+  const addRow = (term, value) => {
+    const dt = document.createElement('dt');
+    dt.textContent = term;
+    const dd = document.createElement('dd');
+    dd.textContent = value;
+    dl.appendChild(dt);
+    dl.appendChild(dd);
+  };
+  if (data.score != null) addRow('AI confidence', `${Math.round(data.score * 100)}%`);
+  if (data.verdict) addRow('Verdict', String(data.verdict));
+  if (data.ep) addRow('Engine', String(data.ep));
+  if (data.latencyMs != null) addRow('Latency', `${data.latencyMs} ms`);
+  if (data.reasons?.length) addRow('Signals', data.reasons.map(String).join(' · '));
+  panel.appendChild(dl);
   shadow.appendChild(panel);
   badge.setAttribute('aria-expanded', 'true');
 }
@@ -199,10 +219,6 @@ function togglePanel(shadow, badge) {
 function closePanel(shadow, badge) {
   shadow.querySelector('.badge-panel')?.remove();
   badge.setAttribute('aria-expanded', 'false');
-}
-
-function escapeHtml(s) {
-  return s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 }
 
 function findBadgeHost(el) {
