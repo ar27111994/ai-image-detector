@@ -43,20 +43,34 @@ function makeChrome() {
   };
 }
 
-async function dispatch(chrome, message, sender = {}) {
+/**
+ * Dispatch a message to every registered listener and collect responses. For async handlers
+ * (return true) we await a response latch instead of a fixed sleep loop, so the test is
+ * event-driven and not timing-dependent (no CI flakiness from a 250ms ceiling).
+ */
+function dispatch(chrome, message, sender = {}) {
+  const RESPONSE_TIMEOUT_MS = 5000;
   const results = [];
+  const pending = [];
   for (const fn of chrome._listeners) {
-    let responded;
-    const isAsync = fn(message, sender, (r) => (responded = r));
-    if (isAsync) {
-      // wait for async sendResponse
-      for (let i = 0; i < 50 && responded === undefined; i++) {
-        await new Promise((r) => setTimeout(r, 5));
+    const latch = new Promise((resolve) => {
+      const timer = setTimeout(() => resolve(undefined), RESPONSE_TIMEOUT_MS);
+      const isAsync = fn(message, sender, (r) => {
+        clearTimeout(timer);
+        resolve(r);
+      });
+      if (!isAsync) {
+        // Synchronous listener that either responded already or opted out (returned false).
+        clearTimeout(timer);
+        resolve(undefined);
       }
-    }
-    if (responded !== undefined) results.push(responded);
+    });
+    pending.push(latch);
   }
-  return results;
+  return Promise.all(pending).then((settled) => {
+    for (const r of settled) if (r !== undefined) results.push(r);
+    return results;
+  });
 }
 
 describe('service-worker message router', () => {
