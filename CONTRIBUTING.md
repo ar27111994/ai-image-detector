@@ -85,6 +85,35 @@ See `docs/MODEL.md` ("Publishing / updating the model"). In short: convert + qua
 `tools/`, publish via `tools/publish_models.mjs` (it re-pins `models/manifest.json`), commit the
 updated manifest, and confirm the accuracy gate still passes.
 
+## Branching & pull requests
+
+- Work happens on short-lived feature branches off `main` (e.g. `feat/<thing>`,
+  `fix/<thing>`). Open a PR into `main`.
+- Every PR must pass all CI gates (lint, format, tests + coverage, security audit, build, e2e,
+  docs-sync). Dependabot PRs auto-merge only after those gates are green.
+- Keep PRs focused: one logical change, with tests.
+
+## Message-protocol API
+
+The contexts (content script ↔ service worker ↔ offscreen document) communicate over a typed
+request/response envelope. The authoritative reference is the documented source:
+[`src/shared/protocol.js`](src/shared/protocol.js) (envelope shape, `sendRequest`, `withTimeout`,
+`registerHandler`) and the message-type constants in
+[`src/shared/constants.js`](src/shared/constants.js) (`MSG`). Read those before adding a message
+type — new types go in `MSG`, and every handler must validate its payload.
+
+## Release process
+
+Releases are tag-driven and fully automated by `.github/workflows/release.yml`:
+
+1. Land all changes on `main` (CI green). Update `CHANGELOG.md` and bump `version` in
+   `package.json` **and** `extension/manifest.json` (they must match).
+2. Tag: `git tag vX.Y.Z && git push origin vX.Y.Z` (semantic version; the workflow rejects
+   non-semver tags and any tag that disagrees with `package.json` / `manifest.json`).
+3. The workflow lints, tests (with the coverage gate), builds, runs e2e, packages the lean and
+   bundled zips (`npm run pack -- --bundled`), generates `SHA256SUMS`, and publishes a GitHub
+   Release with the zips, the raw `.onnx` model, and the checksums.
+
 ## Code of conduct
 
 Be kind and constructive. We're building privacy-preserving open infrastructure — contributions

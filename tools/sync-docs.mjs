@@ -59,8 +59,11 @@ async function computeValues() {
     console.warn('[sync] no coverage-summary.json — run npm run cover first');
   }
 
-  // Benchmark accuracy from the canonical (single-view, aligned-pipeline) result files.
-  values.BA_RAW = await latestBa('haywoodsloan-int8__single-full.jsonl');
+  // Benchmark accuracy from the canonical result files. BA_RAW is the SHIPPED pipeline
+  // (single-view + forensic fusion + Platt calibration), measured by the definitive run
+  // (single-full-final). BA_RAW_UNCALIBRATED is the raw neural score without calibration,
+  // kept for the calibration-quality discussion in BENCHMARK.md.
+  values.BA_RAW = await latestBa('haywoodsloan-int8__single-full-final.jsonl');
   values.BA_RAW_UNCALIBRATED = await latestBa('haywoodsloan-int8__single-full.jsonl');
   values.BA_AUGMENTED = await latestBa('haywoodsloan-int8__single-aug.jsonl');
 

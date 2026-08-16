@@ -1,0 +1,135 @@
+AI Image Detector
+Copyright (c) 2026 ar27111994
+
+This project is licensed under the MIT License — see the LICENSE file.
+
+================================================================================
+Third-party software bundled in the built extension (dist/)
+================================================================================
+
+The following components are bundled into the extension at build time. They are
+used under their respective licenses, which are reproduced or referenced below.
+
+--------------------------------------------------------------------------------
+1. ONNX Runtime Web (onnxruntime-web)
+--------------------------------------------------------------------------------
+   Version : 1.22.0
+   Source  : https://github.com/microsoft/onnxruntime
+   License : MIT
+   Use     : In-browser ONNX model inference (WebGPU + WebAssembly execution
+             providers). The WebAssembly runtime binaries are vendored into
+             dist/vendor/ at build time so no runtime network fetch occurs.
+
+   MIT License
+
+   Copyright (c) Microsoft Corporation
+
+   Permission is hereby granted, free of charge, to any person obtaining a copy
+   of this software and associated documentation files (the "Software"), to deal
+   in the Software without restriction, including without limitation the rights
+   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+   copies of the Software, and to permit persons to whom the Software is
+   furnished to do so, subject to the following conditions:
+
+   The above copyright notice and this permission notice shall be included in all
+   copies or substantial portions of the Software.
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+   SOFTWARE.
+
+--------------------------------------------------------------------------------
+2. exifr
+--------------------------------------------------------------------------------
+   Version : 7.1.3
+   Source  : https://github.com/MikeKovarik/exifr
+   License : MIT
+   Use     : Parsing of EXIF / XMP / ICC metadata from image bytes as part of
+             the forensic metadata signal layer.
+
+   MIT License
+
+   Copyright (c) 2019 Mike Kovarik
+
+   Permission is hereby granted, free of charge, to any person obtaining a copy
+   of this software and associated documentation files (the "Software"), to deal
+   in the Software without restriction, including without limitation the rights
+   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+   copies of the Software, and to permit persons to whom the Software is
+   furnished to do so, subject to the following conditions:
+
+   The above copyright notice and this permission notice shall be included in all
+   copies or substantial portions of the Software.
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+   SOFTWARE.
+
+--------------------------------------------------------------------------------
+3. fft.js
+--------------------------------------------------------------------------------
+   Version : 4.0.4
+   Source  : https://github.com/indutny/fft.js
+   License : MIT
+   Use     : Radix-2 Fast Fourier Transform used by the frequency-domain
+             (spectral) feature extractor.
+
+   MIT License
+
+   Copyright (c) 2017 Fedor Indutny
+
+   Permission is hereby granted, free of charge, to any person obtaining a copy
+   of this software and associated documentation files (the "Software"), to deal
+   in the Software without restriction, including without limitation the rights
+   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+   copies of the Software, and to permit persons to whom the Software is
+   furnished to do so, subject to the following conditions:
+
+   The above copyright notice and this permission notice shall be included in all
+   copies or substantial portions of the Software.
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+   SOFTWARE.
+
+================================================================================
+Bundled machine-learning model (downloaded once at setup / embedded in the
+self-contained release zip)
+================================================================================
+
+--------------------------------------------------------------------------------
+4. haywoodsloan/ai-image-detector (SwinV2 image classifier)
+--------------------------------------------------------------------------------
+   Source  : https://huggingface.co/haywoodsloan/ai-image-detector
+   License : Apache License, Version 2.0
+   Use     : The neural detection model. Converted to ONNX and quantized to
+             int8 by this project's reproducible pipeline (see docs/MODEL.md and
+             tools/). The model weights are NOT MIT-licensed; they are used and
+             redistributed under the Apache-2.0 license.
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+
+   The full text of the Apache License, Version 2.0 is available at
+   http://www.apache.org/licenses/LICENSE-2.0

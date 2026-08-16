@@ -35,7 +35,26 @@ This extension is designed around a strict local-only guarantee:
 ## Build & dependency security
 
 - Locked dependencies (`package-lock.json`), `npm ci` for reproducible installs.
-- CI runs `npm audit --audit-level=high` and a scan that fails on unexpected remote URLs in the
-  shipped runtime.
+- CI runs `npm audit --audit-level=high`, a scan that fails on unexpected remote URLs in the
+  shipped runtime, and CodeQL static analysis (`.github/workflows/codeql.yml`).
 - GitHub Actions are pinned to full commit SHAs; Dependabot keeps dependencies current.
 - Python is used only for offline model conversion (never at build or runtime).
+
+## Threat model (attack surface)
+
+Trust boundary: untrusted input is any **image byte stream** and any **web-page DOM** the content
+script touches; the extension's own contexts (service worker, offscreen document, extension pages)
+are trusted only after sender validation.
+
+| Threat                        | Vector                                                               | Mitigation                                                                                                                               |
+| ----------------------------- | -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Image data exfiltration       | Malicious/compromised extension code path                            | No network egress for image bytes; inference is local; CI fails on unexpected remote URLs in `src/`.                                     |
+| Supply-chain / tampered model | MITM or poisoned download of ONNX weights                            | SHA-256 pin in committed `models/manifest.json`, verified before persist **and** before load; unsigned specs rejected.                   |
+| Stored-XSS via image metadata | Crafted EXIF/XMP/PNG text rendered into the badge detail panel       | All forensic strings pass through HTML-escaping before `innerHTML`; covered by `tests/unit/security.test.js`.                            |
+| Malicious message sender      | A web page or another extension driving analysis / mutating settings | Service worker rejects senders whose id/origin isn't this extension (`isExtensionContext`); protocol envelopes validated by `isRequest`. |
+| Malformed-input crash / DoS   | Truncated or hostile JPEG/PNG/WebP containers                        | Parsers are bounds-checked and non-throwing; `tests/unit/malformed-inputs.test.js` fuzzes adversarial buffers.                           |
+| Dependency vulnerability      | A CVE in a bundled npm dep                                           | `npm audit` (high+ fails CI), Dependabot weekly updates, CodeQL.                                                                         |
+| Settings injection            | Hostile values in `chrome.storage`                                   | `sanitizeSettings` clamps/coerces all values to safe ranges on read.                                                                     |
+
+Out of scope (by design): a fully compromised browser, physical access, or a malicious page
+_reading its own_ images (it already has them).

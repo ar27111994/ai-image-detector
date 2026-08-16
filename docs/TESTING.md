@@ -13,7 +13,7 @@
 
 ## Test counts
 
-<!-- AUTO:TEST_COUNT -->236<!-- /AUTO:TEST_COUNT --> tests across <!-- AUTO:TEST_FILES -->26<!-- /AUTO:TEST_FILES --> files (unit + integration), plus 6 e2e cases in real Chrome.
+<!-- AUTO:TEST_COUNT -->263<!-- /AUTO:TEST_COUNT --> tests across <!-- AUTO:TEST_FILES -->31<!-- /AUTO:TEST_FILES --> files (unit + integration), plus 6 e2e cases in real Chrome.
 
 > Test counts, coverage %, and benchmark accuracy in the docs are auto-synced from the source of
 > truth via `npm run docs:sync` (see CONTRIBUTING.md). The `test` CI job fails if they drift
@@ -23,9 +23,9 @@
 
 Coverage targets the pure, platform-independent logic (`src/shared/**`) plus the model manager
 (`src/background/model-manager.js`). The vitest config enforces a **90% floor on lines, branches,
-functions, and statements** (currently <!-- AUTO:COV_LINES -->96.9<!-- /AUTO:COV_LINES --> lines /
+functions, and statements** (currently <!-- AUTO:COV_LINES -->97.0<!-- /AUTO:COV_LINES --> lines /
 
-<!-- AUTO:COV_BRANCHES -->91.0<!-- /AUTO:COV_BRANCHES --> branches / <!-- AUTO:COV_FUNCS -->93.1<!-- /AUTO:COV_FUNCS --> functions).
+<!-- AUTO:COV_BRANCHES -->91.1<!-- /AUTO:COV_BRANCHES --> branches / <!-- AUTO:COV_FUNCS -->93.1<!-- /AUTO:COV_FUNCS --> functions).
 
 Runtime glue (SW router, offscreen inference engine, content script, pages) is covered by the
 integration (mock-chrome) and e2e suites — the only faithful environments for those APIs.

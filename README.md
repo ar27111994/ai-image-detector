@@ -7,7 +7,7 @@
 [![Chrome MV3](https://img.shields.io/badge/Chrome-Manifest%20V3-4285F4?logo=googlechrome&logoColor=white)](https://developer.chrome.com/docs/extensions/mv3/intro/)
 [![ONNX Runtime Web](https://img.shields.io/badge/inference-ONNX%20Runtime%20Web-005CED)](https://onnxruntime.ai/docs/tutorials/web/)
 
-<!-- AUTO:BA_BADGE -->[![Balanced accuracy: 81.5%](https://img.shields.io/badge/balanced%20accuracy-81.5%25-success)](docs/BENCHMARK.md)<!-- /AUTO:BA_BADGE -->
+<!-- AUTO:BA_BADGE -->[![Balanced accuracy: 84.2%](https://img.shields.io/badge/balanced%20accuracy-84.2%25-success)](docs/BENCHMARK.md)<!-- /AUTO:BA_BADGE -->
 
 [![100% offline inference](https://img.shields.io/badge/inference-100%25%20offline-brightgreen)](docs/ARCHITECTURE.md)
 [![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-model%20sources-yellow)](https://huggingface.co/haywoodsloan/ai-image-detector-dev-deploy)
@@ -103,16 +103,19 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). In short:
 Internal public benchmark (471 images: OpenFake modern generators + COCO/OpenFakeTiny reals, with
 JPEG-recompress/resize augmentations), threshold 0.65:
 
-- **Balanced accuracy: <!-- AUTO:BA_RAW -->81.5%<!-- /AUTO:BA_RAW -->** (TPR 63.6%, TNR 99.4%) on
-  the raw split with the full calibrated pipeline; **<!-- AUTO:BA_AUGMENTED -->83.1%<!-- /AUTO:BA_AUGMENTED -->**
-  on the web-augmented split. See [docs/BENCHMARK.md](docs/BENCHMARK.md) for the
-  full methodology, per-generator breakdown, and reproduction steps.
+- **Balanced accuracy: <!-- AUTO:BA_RAW -->84.2%<!-- /AUTO:BA_RAW -->** (TPR 82.6%, TNR 85.8%) on
+  the raw split under the exact calibration the extension ships;
+  **<!-- AUTO:BA_AUGMENTED -->83.1%<!-- /AUTO:BA_AUGMENTED -->** on the web-augmented split. (The
+  raw neural score before calibration is
+  <!-- AUTO:BA_RAW_UNCALIBRATED -->81.5%<!-- /AUTO:BA_RAW_UNCALIBRATED -->.) See
+  [docs/BENCHMARK.md](docs/BENCHMARK.md) for the full methodology, per-generator breakdown, and
+  reproduction steps.
 
 ## Development
 
 ```bash
 npm run dev        # watch-mode build
-npm test           # unit + integration tests (<!-- AUTO:TEST_COUNT -->236<!-- /AUTO:TEST_COUNT -->)
+npm test           # unit + integration tests (<!-- AUTO:TEST_COUNT -->263<!-- /AUTO:TEST_COUNT -->)
 npm run cover      # coverage (v8, gated)
 npm run test:e2e   # end-to-end in headless Chrome-for-Testing (6 cases)
 npm run lint       # eslint (blocks CI)

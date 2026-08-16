@@ -64,6 +64,11 @@ async function copyStatic() {
   await cp(path.join(extensionDir, 'icons'), path.join(distDir, 'icons'), { recursive: true });
   await cp(path.join(extensionDir, 'pages'), path.join(distDir, 'pages'), { recursive: true });
 
+  // License + third-party notices ship inside the package so the installed
+  // extension is self-documenting (REQ-21).
+  await copyFile(path.join(repoRoot, 'LICENSE'), path.join(distDir, 'LICENSE'));
+  await copyFile(path.join(repoRoot, 'NOTICE'), path.join(distDir, 'NOTICE'));
+
   // Vendored ORT WebAssembly assets (exact filenames verified to exist)
   const vendorDir = path.join(distDir, 'vendor');
   await mkdir(vendorDir, { recursive: true });
