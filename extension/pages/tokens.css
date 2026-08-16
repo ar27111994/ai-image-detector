@@ -86,6 +86,18 @@
 
   /* ---- Focus ---- */
   --focus-ring: 0 0 0 2px var(--color-bg), 0 0 0 4px var(--color-focus-ring);
+  /* High-contrast ring for use on saturated (brand/verdict) surfaces where the
+     neutral ring would blend in. */
+  --focus-ring-contrast: 0 0 0 2px #ffffff, 0 0 0 4px var(--color-focus-ring);
+
+  /* ---- Form controls ---- */
+  --control-size-checkbox: 18px;
+  --target-min: 24px; /* WCAG 2.5.8 minimum pointer target (AA) */
+
+  /* ---- In-page badge overlay (content script; topmost layer) ---- */
+  --z-badge-host: 2147483646;
+  --z-badge: 2147483647;
+  --badge-shadow: var(--shadow-badge);
 }
 
 /* Dark theme overrides (system preference). */
@@ -135,6 +147,13 @@
   box-shadow: var(--focus-ring);
 }
 
+/* On saturated (primary/danger) buttons the neutral outer ring blends into the
+   button background; use the high-contrast ring so keyboard focus stays visible. */
+.btn-primary:focus-visible,
+.btn-danger:focus-visible {
+  box-shadow: var(--focus-ring-contrast);
+}
+
 .btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
@@ -168,7 +187,12 @@
   color: var(--color-busy);
   cursor: pointer;
   font-size: var(--font-size-sm);
-  padding: 0;
+  /* Inline-flex + min height so the interactive target meets WCAG 2.5.8 (24px)
+     without adding visual weight to text-style actions. */
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--target-min);
+  padding: 0 var(--spacing-xs);
   text-decoration: underline;
   border-radius: var(--radius-sm);
 }
@@ -236,4 +260,40 @@ textarea:focus-visible,
   to {
     transform: translateX(100%);
   }
+}
+
+/* Named skeleton placeholders (no inline styles — sizing lives in tokens). */
+.skeleton-pill {
+  width: 90px;
+  height: 22px;
+  border-radius: var(--radius-full);
+}
+.skeleton-line {
+  width: 70%;
+  height: 12px;
+  margin-top: var(--spacing-sm);
+}
+.skeleton-title {
+  width: 200px;
+  height: 24px;
+  margin-bottom: var(--spacing-xl);
+}
+.skeleton-panel {
+  width: 100%;
+  height: 180px;
+}
+.skeleton-hero {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto var(--spacing-lg);
+}
+.skeleton-heading {
+  width: 240px;
+  height: 22px;
+  margin: 0 auto var(--spacing-md);
+}
+.skeleton-subline {
+  width: 80%;
+  height: 14px;
+  margin: 0 auto;
 }

@@ -10,8 +10,11 @@ const root = document.getElementById('options-root');
 function el(tag, attrs = {}, text = null) {
   const node = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
+    // Skip absent attribute values so callers can conditionally include ARIA/etc. without
+    // rendering invalid markup like aria-describedby="null".
+    if (v == null || v === false) continue;
     if (k === 'class') node.className = v;
-    else node.setAttribute(k, v);
+    else node.setAttribute(k, v === true ? '' : v);
   }
   if (text != null) node.textContent = text;
   return node;

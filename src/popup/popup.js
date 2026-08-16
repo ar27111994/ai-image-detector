@@ -22,6 +22,11 @@ function el(tag, attrs = {}, text = null) {
 async function init() {
   root.textContent = '';
   root.appendChild(header());
+  // Loading placeholder so the popup doesn't flash empty while the service worker responds.
+  const loading = el('div', { class: 'popup-loading', role: 'status', 'aria-live': 'polite' });
+  loading.appendChild(el('span', { class: 'skeleton skeleton-block' }, ''));
+  loading.appendChild(el('span', { class: 'skeleton skeleton-block' }, ''));
+  root.appendChild(loading);
 
   let status = null;
   let settings = { ...DEFAULT_SETTINGS };
@@ -32,10 +37,12 @@ async function init() {
       sendRequest(makeRequest(MSG.GET_SETTINGS, {}, null), { timeoutMs: 15000 }),
       currentTabStats(),
     ]);
+    loading.remove();
     if (statusRes?.ok) status = statusRes.result;
     if (settingsRes?.ok) settings = { ...settings, ...settingsRes.result };
     tabStats = statsRes;
   } catch (err) {
+    loading.remove();
     const isTimeout = /timeout/i.test(String(err?.message ?? ''));
     root.appendChild(
       el(

@@ -48,17 +48,7 @@ h1 {
   flex: 1;
 }
 
-.opt-row input[type='number'] {
-  width: 80px;
-  padding: var(--spacing-xs) var(--spacing-sm);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  font-family: var(--font-family);
-  font-size: var(--font-size-md);
-  background: var(--color-surface);
-  color: var(--color-text);
-}
-
+.opt-row input[type='number'],
 .opt-row select {
   padding: var(--spacing-xs) var(--spacing-sm);
   border: 1px solid var(--color-border);
@@ -67,12 +57,32 @@ h1 {
   font-size: var(--font-size-md);
   background: var(--color-surface);
   color: var(--color-text);
+  transition:
+    border-color var(--duration-fast) var(--easing-standard),
+    box-shadow var(--duration-fast) var(--easing-standard);
+}
+.opt-row input[type='number'] {
+  width: 80px;
+}
+.opt-row input[type='number']:hover:not(:disabled),
+.opt-row select:hover:not(:disabled) {
+  border-color: var(--color-text-muted);
+}
+.opt-row input[type='number']:disabled,
+.opt-row select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .opt-row input[type='checkbox'] {
-  width: 18px;
-  height: 18px;
+  width: var(--control-size-checkbox);
+  height: var(--control-size-checkbox);
   accent-color: var(--color-brand);
+  cursor: pointer;
+}
+.opt-row input[type='checkbox']:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .opt-hint {

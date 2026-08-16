@@ -10,7 +10,12 @@
 const BADGE_ATTR = 'data-ai-detector-badge';
 const WRAPPED_ATTR = 'data-ai-detector-wrapped';
 
-/** Verdict presentation tokens (WCAG AA contrast: fg on bg >= 4.5:1). */
+/**
+ * Verdict presentation tokens (WCAG AA contrast: fg on bg >= 4.5:1). These mirror the
+ * --color-ai / --color-real / --color-uncertain / --color-neutral tokens in
+ * extension/pages/tokens.css; they are inlined here because the content script cannot
+ * @import the extension stylesheet into the page's shadow DOM.
+ */
 const VERDICT_TOKENS = {
   ai: { bg: 'rgb(198, 40, 40)', fg: '#ffffff', label: 'AI', icon: '⚠' },
   real: { bg: 'rgb(46, 125, 50)', fg: '#ffffff', label: 'Real', icon: '✓' },
@@ -113,15 +118,28 @@ function ensureBadgeHost(el) {
   const shadow = host.attachShadow({ mode: 'open' });
 
   const style = document.createElement('style');
+  // Theme-aware via prefers-color-scheme: the panel tracks the user's system theme so it
+  // stays legible on both light and dark pages. Colors mirror tokens.css.
   style.textContent = `
+    :host { color-scheme: light dark; }
+    .badge {
+      box-sizing: border-box;
+      min-height: 24px; /* WCAG 2.5.8 minimum pointer target */
+      padding: 3px 8px;
+    }
     .badge:focus-visible { outline: 2px solid #fff; outline-offset: 1px; box-shadow: 0 0 0 3px #4f46e5; }
     .badge-panel { all: initial; position: absolute; top: calc(100% + 6px); left: 0; z-index: 2147483647;
-      background: #16181d; color: #e6e8eb; border-radius: 8px; padding: 10px 12px;
-      font: 400 12px/1.5 system-ui, sans-serif; box-shadow: 0 4px 16px rgba(0,0,0,0.5);
-      border: 1px solid rgba(255,255,255,0.12); min-width: 200px; max-width: 280px; }
+      background: #ffffff; color: #1a1d21; border-radius: 8px; padding: 10px 12px;
+      font: 400 12px/1.5 system-ui, sans-serif; box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+      border: 1px solid rgba(26,29,33,0.14); min-width: 200px; max-width: 280px; }
     .badge-panel h3 { margin: 0 0 6px; font-size: 12px; font-weight: 600; }
     .badge-panel dl { margin: 0; } .badge-panel dt { font-weight: 600; }
-    .badge-panel dd { margin: 0 0 4px; color: rgba(230,232,235,0.75); }
+    .badge-panel dd { margin: 0 0 4px; color: rgba(26,29,33,0.66); }
+    @media (prefers-color-scheme: dark) {
+      .badge-panel { background: #16181d; color: #e6e8eb;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.5); border-color: rgba(255,255,255,0.12); }
+      .badge-panel dd { color: rgba(230,232,235,0.75); }
+    }
   `;
   shadow.appendChild(style);
 

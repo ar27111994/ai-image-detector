@@ -127,3 +127,16 @@ input[type='range'] {
   border-radius: var(--radius-md);
   font-size: var(--font-size-sm);
 }
+
+/* Loading placeholder shown while the service worker responds. */
+.popup-loading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-lg);
+}
+.skeleton-block {
+  display: block;
+  height: 36px;
+  width: 100%;
+}
