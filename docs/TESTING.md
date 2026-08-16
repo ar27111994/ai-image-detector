@@ -2,14 +2,14 @@
 
 ## Layers
 
-| Layer       | Command                                                 | What it covers                                                                                                                                                                                                                               |
-| ----------- | ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Unit        | `npm test`                                              | Pure modules (preprocessing, metrics, RNG, protocol, LRU cache, hashing, settings, container/PNG/XMP/C2PA/EXIF parsers, fusion, spectral, discovery, badges, model-manager, inference score) + malformed-input, security, concurrency/stress |
-| Integration | `npm test` (tests/integration)                          | Service-worker message router with a mock chrome runtime: protocol round-trip, sender validation (FORBIDDEN), bad-input and site-disabled paths                                                                                              |
-| Benchmark   | `node bench/run-pipeline.mjs --model haywoodsloan-int8` | Full detection stack over the labeled public benchmark via onnxruntime-node; **exits non-zero below the 75% bar**                                                                                                                            |
-| E2E         | `npm run test:e2e`                                      | Real extension in headless Chrome-for-Testing: SW start, content-script inject, discovery + lazy-load, SPA navigation, graceful degradation pre-setup, options-page render                                                                   |
-| Lint/format | `npm run lint` / `npm run format:check`                 | ESLint flat + Prettier (both block CI on failure)                                                                                                                                                                                            |
-| Coverage    | `npm run cover`                                         | v8 coverage on `src/shared/**`, 85% floor (currently ~96% lines)                                                                                                                                                                             |
+| Layer       | Command                                                 | What it covers                                                                                                                                                                                                                                                                                                                                                                                |
+| ----------- | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Unit        | `npm test`                                              | Pure modules (preprocessing, metrics, RNG, protocol, LRU cache, hashing, settings, math, model-variant, container/PNG/XMP/C2PA/EXIF parsers, fusion, spectral, discovery, badges, model-manager, inference score) + the runtime modules (offscreen orchestrator, service-worker router, content-script queue, popup/options/onboarding pages) + malformed-input, security, concurrency/stress |
+| Integration | `npm test` (tests/integration)                          | Service-worker message router with a mock chrome runtime: protocol round-trip, sender validation (FORBIDDEN), bad-input and site-disabled paths (event-driven response latch, no fixed sleeps)                                                                                                                                                                                                |
+| Benchmark   | `node bench/run-pipeline.mjs --model haywoodsloan-int8` | Full detection stack over the labeled public benchmark via onnxruntime-node; **exits non-zero below the 75% bar**                                                                                                                                                                                                                                                                             |
+| E2E         | `npm run test:e2e`                                      | Real extension in headless Chrome-for-Testing: SW start, content-script inject, discovery + lazy-load, SPA navigation, graceful degradation pre-setup, options-page render                                                                                                                                                                                                                    |
+| Lint/format | `npm run lint` / `npm run format:check`                 | ESLint flat + Prettier (both block CI on failure)                                                                                                                                                                                                                                                                                                                                             |
+| Coverage    | `npm run cover`                                         | v8 coverage on `src/shared/**` + `src/background/model-manager.js`, 90% floor on lines/branches/functions/statements                                                                                                                                                                                                                                                                          |
 
 ## Test counts
 
@@ -21,22 +21,31 @@
 
 ## Coverage policy
 
-Coverage targets the pure, platform-independent logic (`src/shared/**`) plus the model manager
-(`src/background/model-manager.js`). The vitest config enforces a **90% floor on lines, branches,
-functions, and statements** (currently <!-- AUTO:COV_LINES -->97.0<!-- /AUTO:COV_LINES --> lines /
+The enforced 90% floor covers the pure, platform-independent logic (`src/shared/**`) plus the
+model manager (`src/background/model-manager.js`) — currently
 
-<!-- AUTO:COV_BRANCHES -->91.3<!-- /AUTO:COV_BRANCHES --> branches / <!-- AUTO:COV_FUNCS -->93.1<!-- /AUTO:COV_FUNCS --> functions).
+<!-- AUTO:COV_LINES -->97.0<!-- /AUTO:COV_LINES --> lines /
+<!-- AUTO:COV_BRANCHES -->91.3<!-- /AUTO:COV_BRANCHES --> branches /
+<!-- AUTO:COV_FUNCS -->93.1<!-- /AUTO:COV_FUNCS --> functions.
 
-Runtime glue (SW router, offscreen inference engine, content script, pages) is covered by the
-integration (mock-chrome) and e2e suites — the only faithful environments for those APIs.
+The runtime/UI modules (service-worker router, offscreen orchestrator, content script, and the
+popup/options/onboarding pages) now have dedicated **unit** suites built on a shared DOM/chrome
+stub (`tests/helpers/dom-stub.js`), in addition to the integration (mock-chrome) and e2e suites.
+Those modules are intentionally excluded from the _coverage gate_ — the stub proves behavior but
+isn't the real Chrome canvas/WebGPU environment, so we gate on the pure logic and assert runtime
+behavior via the unit + e2e suites instead of a misleading line percentage.
 
 ## CI gates
 
-`.github/workflows/ci.yml`: `quality` (lint + format) → `test` (coverage gate + artifact) →
-`security` (npm audit high+ + remote-URL scan of the shipped runtime) → `build` (dist layout
-assert + artifact) → `e2e` (real Chrome). Releases (`.github/workflows/release.yml`) run the full
-suite + `npm run pack` + publish the zip on `v*` tags. Dependabot keeps npm + GitHub Actions
-current (`onnxruntime-*` is pinned for manual review because the vendored wasm must match).
+`.github/workflows/ci.yml`: `quality` (lint + format) → `test` (coverage gate + docs:check +
+artifact) → `security` (npm audit high+ + remote-URL scan of the shipped runtime) → `build`
+(dist layout + **manifest/MV3 schema + model-manifest SHA-256 pin** asserts + artifact) → `e2e`
+(real Chrome). `.github/workflows/codeql.yml` runs CodeQL (security-and-quality) on every push/PR
+plus a weekly sweep. Releases (`.github/workflows/release.yml`) validate the semver tag against
+`package.json`/`manifest.json`, run the full suite + e2e, `npm run pack -- --bundled`, generate
+`release/SHA256SUMS`, and publish the zips + raw model + checksums on `v*` tags. Dependabot keeps
+npm + GitHub Actions + the Python conversion toolchain current (`onnxruntime-*` is grouped for
+manual review because the vendored wasm must match).
 
 ## Benchmark reproduction
 

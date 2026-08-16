@@ -51,8 +51,10 @@ on the user's device.
 - The primary detector is a pre-trained image classifier converted to ONNX; conversion script lives
   in-repo (Python optional, only for reproducibility audits). The extension downloads the published
   ONNX weights once at first-run setup from Hugging Face (pinned URL + SHA-256 verified).
-- Detection is an ensemble: primary neural classifier + metadata/forensic signals + spectral
-  features, fused into a calibrated probability; per-image score shown as percentage.
+- Detection is an ensemble: primary neural classifier + metadata/forensic signals fused into a
+  calibrated probability; per-image score shown as percentage. (A spectral/FFT feature module was
+  built and tested but is dormant in the shipped fusion — measured not to improve accuracy; see
+  TECH-DEBT.md TD-1.)
 - "Balanced accuracy at 65% threshold" => treat score >= 0.65 as "AI", else "real"; balanced
   accuracy = (TPR + TNR) / 2 must be >= 0.75.
 
@@ -65,4 +67,5 @@ on the user's device.
 
 ## Current Status
 
-Milestone 1 - Phase 0 (init). See STATE.md.
+Milestone 1 **COMPLETE** (v1.0.0 shipped) + post-release audit/hardening pass complete. See
+STATE.md for the current verified position (268 tests, e2e 6/6, 84.2%/83.0% accuracy).

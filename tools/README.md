@@ -16,7 +16,7 @@ python -m venv .venv
 python tools/convert_wkaandemir.py        # CLIP ViT-B/16 LoRA -> fp32 ONNX (+validation)
 python tools/convert_ateeqq.py            # SigLIP2-512 -> fp32 ONNX (+validation)
 python tools/quantize.py --in models-cache/wkaandemir-fp32.onnx
-python tools/publish_models.mjs           # gh release upload + models/manifest.json emission
+node tools/publish_models.mjs             # gh release upload + models/manifest.json emission
 ```
 
 All artifacts land in `models-cache/` (gitignored). The committed, pinned result is

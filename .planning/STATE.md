@@ -2,13 +2,22 @@
 
 ## Current Position
 
-- Milestone: 1 — COMPLETE (v1.0.0). Post-release review, polish, and research passes COMPLETE.
-- Last action: full benchmarks re-run on the shipped single-view path (raw 81.5% BA / augmented
-  83.1% BA @ 0.65 — clears the 75% bar and 80% internal gate). Crop-grid TTA was implemented,
-  measured (regressed to 79.6%), and reverted to default-off. Calibration is ECE-verified.
-- Clean-clone reproducibility verified: npm ci && npm run build && npm test (227) &&
-  npm run test:e2e (6/6) && npm run docs:check all pass. Coverage 96.9% lines / 91.0% branches /
-  93.1% functions (90% gate). Docs auto-synced via tools/sync-docs.mjs; CI enforces freshness.
+- Milestone: 1 — COMPLETE (v1.0.0). Post-release review, polish, research, AND a full
+  audit-and-hardening pass COMPLETE.
+- Accuracy (re-measured this cycle under the exact shipped calibration): **84.2% raw** /
+  **83.0% augmented (full 1,413-image set)** @ 0.65 — clears the 75% bounty bar and the 80%
+  internal gate. The README previously understated this as 81.5% (the uncalibrated raw score) and
+  cited a 103-image augmented subset; both corrected and sourced from the canonical result files
+  (`haywoodsloan-int8__single-full-final.jsonl`, `haywoodsloan-int8__single-aug-final.jsonl`).
+- Hardening pass (post-v1.0.0 audit): 32 findings triaged and resolved — third-party NOTICE added
+  (REQ-21, shipped in dist/), CodeQL + release tag/version/clean-tree gates + SHA256SUMS, WCAG
+  fixes (theme-aware badge panel, aria-describedby fix, 24px touch targets, contrast focus ring),
+  design-token expansion, DRY refactors (shared math.js, model-variant.js, centralized TIMEOUTS),
+  bounded IDB get, offscreen crash recovery, and unit suites for the five previously-untested
+  UI/content modules. See CHANGELOG [Unreleased] and .planning/TECH-DEBT.md.
+- Verified gates: npm ci && npm run build && npm test (268 tests / 32 files) && npm run test:e2e
+  (6/6) && npm run lint && npm run format:check && npm run docs:check all pass. Coverage 97.0%
+  lines / 91.3% branches / 93.1% functions (90% gate). Docs auto-synced via tools/sync-docs.mjs.
 - Git hooks: pre-commit (lint-staged + docs:check), pre-push (full tests + e2e).
 - Next (manual, owner): submit claim on poidh.xyz bounty #323 linking the repo.
 

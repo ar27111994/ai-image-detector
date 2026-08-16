@@ -10,8 +10,8 @@
 | Training                 | AutoTrain; AI-vs-real image classification (continuously updated)                   |
 | Input                    | 256×256 RGB, ImageNet normalization (mean 0.485/0.456/0.406, std 0.229/0.224/0.225) |
 | Labels                   | `id2label {0: artificial, 1: real}`                                                 |
-| Internal benchmark (raw) | **81.2% balanced accuracy** (TPR 63.0 / TNR 99.4) @ 0.65                            |
-| Shipped variant          | int8 (Conv excluded) — 311MB — BA 81.5% (drift ≈ 0)                                 |
+| Internal benchmark (raw) | **81.2% balanced accuracy** (TPR 63.0 / TNR 99.4) @ 0.65 (uncalibrated)             |
+| Shipped variant          | int8 (Conv excluded) — 311MB — **84.2% BA** after shipped calibration + fusion      |
 
 ## Why this model
 
