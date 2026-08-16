@@ -28,7 +28,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@ff0a06e83cb2de817e2a0b1b9adfa807e4e17776 # v4.31.0
+        uses: github/codeql-action/init@4e94bd11f71e507f7f87df81788dff88d1dacbfb # v4.31.0
         with:
           languages: javascript
           # Security-relevant queries plus the extended security-and-quality suite.
@@ -38,6 +38,6 @@ jobs:
       # directly. Skip `npm run build` so the scan reflects source, not bundled output.
 
       - name: Perform CodeQL analysis
-        uses: github/codeql-action/analyze@ff0a06e83cb2de817e2a0b1b9adfa807e4e17776 # v4.31.0
+        uses: github/codeql-action/analyze@4e94bd11f71e507f7f87df81788dff88d1dacbfb # v4.31.0
         with:
           category: /language:javascript
