@@ -17,10 +17,15 @@
  * @param {number} inputSize model input edge (px)
  * @returns {Array<{ sx: number, sy: number, sw: number, sh: number }>} source rects
  */
-export function computeViewRects(width, height, inputSize) {
+export function computeViewRects(width, height, inputSize, { enableCropGrid = false } = {}) {
   const full = { sx: 0, sy: 0, sw: width, sh: height };
+  // Measured result (471-image internal benchmark, SwinV2): the 50% crop grid REDUCES balanced
+  // accuracy (TTA 79.6% vs single-view 84.5%) because crops discard the global generation
+  // artifacts the model relies on. Crop-grid TTA is therefore OFF by default; it can be
+  // re-enabled for architectures that benefit (e.g., a patch-token model like DINOv2+PatchHead).
+  if (!enableCropGrid) return [full];
+
   const minDim = Math.min(width, height);
-  // Only add crops when the image is large enough that 2x downscaling would occur.
   if (minDim < inputSize * 2) return [full];
 
   const crop = Math.floor(minDim * 0.5); // 50% crops

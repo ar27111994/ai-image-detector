@@ -2,13 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { computeViewRects, meanLogits } from '../../src/shared/tta.js';
 
 describe('tta.computeViewRects', () => {
-  it('returns only the full frame for small images (< 2x input)', () => {
-    const rects = computeViewRects(200, 200, 256);
-    expect(rects).toEqual([{ sx: 0, sy: 0, sw: 200, sh: 200 }]);
+  it('returns only the full frame by default (crop grid off — measured to reduce SwinV2 accuracy)', () => {
+    // Even for large images, the default is single-view full-frame (the measured-best path).
+    expect(computeViewRects(2000, 1500, 256)).toEqual([{ sx: 0, sy: 0, sw: 2000, sh: 1500 }]);
+    expect(computeViewRects(200, 200, 256)).toEqual([{ sx: 0, sy: 0, sw: 200, sh: 200 }]);
   });
 
-  it('returns full frame + 5-crop grid for large images', () => {
-    const rects = computeViewRects(1024, 1024, 256);
+  it('returns full frame + 5-crop grid for large images when crop grid is enabled', () => {
+    const rects = computeViewRects(1024, 1024, 256, { enableCropGrid: true });
     expect(rects.length).toBe(6);
     expect(rects[0]).toEqual({ sx: 0, sy: 0, sw: 1024, sh: 1024 }); // full
     // corners + center
@@ -18,14 +19,14 @@ describe('tta.computeViewRects', () => {
     expect(rects).toContainEqual({ sx: 512, sy: 512, sw: 512, sh: 512 }); // bottom-right
   });
 
-  it('crop rects stay within image bounds', () => {
+  it('crop rects stay within image bounds when enabled', () => {
     for (const [w, h] of [
       [800, 600],
       [1024, 512],
       [2000, 1500],
       [513, 511],
     ]) {
-      for (const r of computeViewRects(w, h, 256)) {
+      for (const r of computeViewRects(w, h, 256, { enableCropGrid: true })) {
         expect(r.sx).toBeGreaterThanOrEqual(0);
         expect(r.sy).toBeGreaterThanOrEqual(0);
         expect(r.sx + r.sw).toBeLessThanOrEqual(w);
@@ -34,8 +35,8 @@ describe('tta.computeViewRects', () => {
     }
   });
 
-  it('handles non-square images', () => {
-    const rects = computeViewRects(1600, 800, 256);
+  it('handles non-square images when enabled', () => {
+    const rects = computeViewRects(1600, 800, 256, { enableCropGrid: true });
     expect(rects.length).toBe(6);
     for (const r of rects) {
       expect(r.sx + r.sw).toBeLessThanOrEqual(1600);
