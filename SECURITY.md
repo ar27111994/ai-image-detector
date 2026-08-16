@@ -35,8 +35,22 @@ This extension is designed around a strict local-only guarantee:
 ## Build & dependency security
 
 - Locked dependencies (`package-lock.json`), `npm ci` for reproducible installs.
-- CI runs `npm audit --audit-level=high`, a scan that fails on unexpected remote URLs in the
-  shipped runtime, and CodeQL static analysis (`.github/workflows/codeql.yml`).
+- **The CI security gate audits the shipped production runtime** (`npm audit --omit=dev
+--audit-level=high`) — the packages actually bundled into the extension (exifr, fft.js,
+  onnxruntime-web). A high/critical vulnerability there fails the build. A full-tree audit
+  (including dev-only tooling) also runs as a non-blocking advisory.
+- **Dev-only transitive vulnerabilities** (vitest, sharp, puppeteer) are patched to their fixed
+  versions. Two remain without an upstream fix and are **accepted, documented risks** because they
+  are not in the shipped surface and are not exploitable in our usage:
+  - `extract-zip` (GHSA-jmr9-qjv8-65gv, symlink path traversal) — only reachable via
+    puppeteer/`@puppeteer/browsers` unzipping a browser archive downloaded from a trusted Google
+    URL; we never unzip untrusted archives.
+  - `adm-zip` (GHSA-xcpc-8h2w-3j85, crafted-zip memory blow-up) — bundled inside
+    `onnxruntime-node`, whose adm-zip code path we never exercise (no unzip). It exists only on
+    the maintainers' benchmark machine, not in the extension.
+    Both are devDependencies, excluded from `dist/`, and re-checked on every CI run; they will be
+    bumped as soon as upstream ships a fix.
+- CodeQL static analysis runs on every push/PR and weekly (`.github/workflows/codeql.yml`).
 - GitHub Actions are pinned to full commit SHAs; Dependabot keeps dependencies current.
 - Python is used only for offline model conversion (never at build or runtime).
 
