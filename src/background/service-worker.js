@@ -10,9 +10,11 @@
  */
 import {
   ANALYSIS_CACHE_MAX_ENTRIES,
+  MAX_IMAGE_BYTES,
   MSG,
   OFFSCREEN_DOCUMENT_PATH,
   STORAGE_KEYS,
+  TIMEOUTS,
 } from '../shared/constants.js';
 import { isRequest, makeError, makeOk, nextId, sendRequest } from '../shared/protocol.js';
 import { imageContentKey } from '../shared/hash.js';
@@ -97,7 +99,7 @@ async function ensureInferenceReady() {
       target: 'offscreen',
       payload: { manifest: cachedManifest },
     },
-    { timeoutMs: 180000 },
+    { timeoutMs: TIMEOUTS.INFERENCE_INIT_MS },
   )
     .then((response) => {
       if (!response?.ok) {
@@ -114,8 +116,6 @@ async function ensureInferenceReady() {
 }
 
 /* ------------------------------- image fetching ------------------------------- */
-
-const MAX_IMAGE_BYTES = 32 * 1024 * 1024; // 32MB safety cap
 
 async function fetchImageBytes(url) {
   const response = await fetch(url, { credentials: 'omit', cache: 'force-cache' });
@@ -268,7 +268,7 @@ async function analyzeBytes(bytes, sourceUrl, minSize) {
         target: 'offscreen',
         payload: { contentHash: key, bytes, minSize },
       },
-      { timeoutMs: 120000 },
+      { timeoutMs: TIMEOUTS.ANALYZE_MS },
     );
     if (!response?.ok) {
       throw Object.assign(new Error(response?.error?.message ?? 'analysis failed'), {

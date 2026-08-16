@@ -2,7 +2,7 @@
  * Onboarding: one-time model download with progress + integrity verification, then a ready
  * state with next steps. Progress is announced accessibly; errors offer retry.
  */
-import { MSG, STORAGE_KEYS } from '../shared/constants.js';
+import { MSG, STORAGE_KEYS, TIMEOUTS } from '../shared/constants.js';
 import { makeRequest, sendRequest } from '../shared/protocol.js';
 
 const root = document.getElementById('onboarding-root');
@@ -54,7 +54,7 @@ function hero() {
 async function getState() {
   try {
     const res = await sendRequest(makeRequest(MSG.MODEL_DOWNLOAD_STATUS, {}, null), {
-      timeoutMs: 15000,
+      timeoutMs: TIMEOUTS.UI_QUERY_MS,
     });
     if (res?.ok) return res.result;
   } catch {
@@ -154,7 +154,9 @@ async function startDownload() {
   wrap.appendChild(el('p', { class: 'muted' }, 'Starting download…'));
   box.appendChild(wrap);
   try {
-    await sendRequest(makeRequest(MSG.MODEL_DOWNLOAD_START, {}, null), { timeoutMs: 600000 });
+    await sendRequest(makeRequest(MSG.MODEL_DOWNLOAD_START, {}, null), {
+      timeoutMs: TIMEOUTS.MODEL_DOWNLOAD_MS,
+    });
   } catch (err) {
     box.textContent = '';
     box.appendChild(

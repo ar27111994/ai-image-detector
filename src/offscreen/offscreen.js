@@ -9,21 +9,16 @@
  */
 import { MSG } from '../shared/constants.js';
 import { isRequest, makeError, makeOk } from '../shared/protocol.js';
+import { pickVariantForEp } from '../shared/model-variant.js';
 import * as engine from './inference-engine.js';
 import { extractForensicSignals } from '../shared/metadata/forensic-extractor.js';
 import { fuseSignals } from '../shared/fusion/fuse.js';
 
 const OFFSCREEN_TARGET = 'offscreen';
 
+/** Adapter: the engine wants an async (ep) => variant picker bound to this manifest. */
 function pickVariantFor(manifest) {
-  return async (ep) => {
-    const order = ep === 'webgpu' ? ['webgpu', 'wasm'] : ['wasm', 'webgpu'];
-    for (const kind of order) {
-      const hit = manifest.variants.find((v) => v.kind === kind);
-      if (hit) return hit;
-    }
-    return manifest.variants[0];
-  };
+  return async (ep) => pickVariantForEp(manifest, ep);
 }
 
 async function ensureReady(payload) {

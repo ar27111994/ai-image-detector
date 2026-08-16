@@ -14,12 +14,13 @@ import { preprocessRgba } from '../shared/preprocess.js';
 import { getModelBlob } from '../shared/model-store.js';
 import { computeViewRects, meanLogits } from '../shared/tta.js';
 import { clamp01 } from '../shared/math.js';
+import { TIMEOUTS } from '../shared/constants.js';
 
 /** Ordered EP preference; wasm is the guaranteed fallback. */
 const EP_PREFERENCE = ['webgpu', 'wasm'];
 
 /** Self-test time budget for the WebGPU probe (ms). If init+1 inference exceeds this, use WASM. */
-const WEBGPU_PROBE_BUDGET_MS = 8000;
+const WEBGPU_PROBE_BUDGET_MS = TIMEOUTS.WEBGPU_PROBE_MS;
 
 let configured = false;
 let session = null;

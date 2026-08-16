@@ -3,7 +3,7 @@
  * All styling comes from the shared design tokens (extension/pages/tokens.css). Fully keyboard
  * and screen-reader accessible.
  */
-import { DEFAULT_SETTINGS, MSG, STORAGE_KEYS } from '../shared/constants.js';
+import { DEFAULT_SETTINGS, MSG, STORAGE_KEYS, TIMEOUTS } from '../shared/constants.js';
 import { makeRequest, sendRequest } from '../shared/protocol.js';
 import { isSiteEnabled } from '../shared/settings.js';
 
@@ -33,8 +33,8 @@ async function init() {
   let tabStats = null;
   try {
     const [statusRes, settingsRes, statsRes] = await Promise.all([
-      sendRequest(makeRequest(MSG.GET_STATUS, {}, null), { timeoutMs: 15000 }),
-      sendRequest(makeRequest(MSG.GET_SETTINGS, {}, null), { timeoutMs: 15000 }),
+      sendRequest(makeRequest(MSG.GET_STATUS, {}, null), { timeoutMs: TIMEOUTS.UI_QUERY_MS }),
+      sendRequest(makeRequest(MSG.GET_SETTINGS, {}, null), { timeoutMs: TIMEOUTS.UI_QUERY_MS }),
       currentTabStats(),
     ]);
     loading.remove();
@@ -183,7 +183,7 @@ function siteToggle() {
       try {
         await sendRequest(
           makeRequest(MSG.SET_SITE_ENABLED, { hostname: host, enabled: cb.checked }, null),
-          { timeoutMs: 10000 },
+          { timeoutMs: TIMEOUTS.PING_MS },
         );
       } finally {
         cb.disabled = false;
@@ -203,7 +203,7 @@ async function currentTabStats() {
       if (tabId == null) return resolve(null);
       try {
         const res = await sendRequest(makeRequest(MSG.GET_TAB_STATS, { tabId }, null), {
-          timeoutMs: 10000,
+          timeoutMs: TIMEOUTS.PING_MS,
         });
         resolve(res?.ok ? res.result : null);
       } catch {

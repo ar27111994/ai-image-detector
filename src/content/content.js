@@ -3,7 +3,7 @@
  * renders confidence badges. Runs in the page's isolated world (no WASM here — all inference
  * happens in the offscreen document).
  */
-import { DEFAULT_SETTINGS, MSG, VERDICT } from '../shared/constants.js';
+import { DEFAULT_SETTINGS, MSG, TIMEOUTS, VERDICT } from '../shared/constants.js';
 import { makeRequest, sendRequest } from '../shared/protocol.js';
 import {
   discoverBackgroundImages,
@@ -14,7 +14,7 @@ import {
 import { removeBadge, setBadge } from './badges.js';
 
 const MAX_CONCURRENT_ANALYSES = 3;
-const OBSERVER_DEBOUNCE_MS = 400;
+const OBSERVER_DEBOUNCE_MS = TIMEOUTS.OBSERVER_DEBOUNCE_MS;
 
 let settings = { ...DEFAULT_SETTINGS };
 let running = false;
@@ -29,7 +29,9 @@ const urlToElements = new Map(); // url -> Set<Element>
 
 async function init() {
   try {
-    const pong = await sendRequest(makeRequest(MSG.PING, {}, null), { timeoutMs: 10000 });
+    const pong = await sendRequest(makeRequest(MSG.PING, {}, null), {
+      timeoutMs: TIMEOUTS.PING_MS,
+    });
     if (!pong?.ok) {
       console.debug('[ai-detector] service worker not ready (unexpected ping response)');
       return;
@@ -42,7 +44,9 @@ async function init() {
   document.documentElement.setAttribute('data-ai-detector-connected', 'true');
 
   try {
-    const res = await sendRequest(makeRequest(MSG.GET_SETTINGS, {}, null), { timeoutMs: 10000 });
+    const res = await sendRequest(makeRequest(MSG.GET_SETTINGS, {}, null), {
+      timeoutMs: TIMEOUTS.PING_MS,
+    });
     if (res?.ok && res.result) settings = { ...settings, ...res.result };
   } catch (err) {
     console.debug('[ai-detector] settings load failed, using defaults:', err?.message ?? err);
@@ -187,12 +191,12 @@ async function analyzeOne(el, url) {
     }
     return await sendRequest(
       makeRequest(MSG.ANALYZE_IMAGE_BYTES, { bytes, minSize: settings.minImageSize }, null),
-      { timeoutMs: 120000 },
+      { timeoutMs: TIMEOUTS.ANALYZE_MS },
     );
   }
   return await sendRequest(
     makeRequest(MSG.ANALYZE_IMAGE, { url, minSize: settings.minImageSize }, null),
-    { timeoutMs: 120000 },
+    { timeoutMs: TIMEOUTS.ANALYZE_MS },
   );
 }
 

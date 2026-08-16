@@ -13,6 +13,7 @@
 import { MSG, STORAGE_KEYS } from '../shared/constants.js';
 import { sha256Hex } from '../shared/hash.js';
 import { getModelBlob, listModelKeys, putModelBlob } from '../shared/model-store.js';
+import { pickVariantForEp } from '../shared/model-variant.js';
 
 const MANIFEST_URL = 'models/manifest.json';
 
@@ -198,14 +199,11 @@ export async function ensureModel(epPreference, onProgress) {
   return await downloadVariant(variant, onProgress);
 }
 
-/** Choose the manifest variant for an execution-provider preference. */
+/**
+ * Choose the manifest variant for an execution-provider preference.
+ * Delegates to the shared implementation so the service worker (download path) and the
+ * offscreen document (load path) pick identical variants.
+ */
 export function pickVariant(manifest, epPreference) {
-  const variants = manifest?.variants;
-  if (!variants?.length) throw new Error('model manifest has no variants');
-  const wanted = epPreference === 'webgpu' ? ['webgpu', 'wasm'] : ['wasm', 'webgpu'];
-  for (const kind of wanted) {
-    const hit = variants.find((v) => v.kind === kind);
-    if (hit) return hit;
-  }
-  return variants[0];
+  return pickVariantForEp(manifest, epPreference);
 }

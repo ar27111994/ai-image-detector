@@ -5,11 +5,11 @@
  * Weights are downloaded ONCE at first-run setup, SHA-256 verified, and stored here as Blobs.
  * All subsequent inference loads from IDB — the extension is fully offline afterwards.
  */
-import { MODEL_DB_NAME, MODEL_DB_VERSION, MODEL_STORE } from './constants.js';
+import { MODEL_DB_NAME, MODEL_DB_VERSION, MODEL_STORE, TIMEOUTS } from './constants.js';
 import { withTimeout } from './protocol.js';
 
 /** Bound on every IndexedDB operation so a hung/blocked store can't stall the service worker. */
-const IDB_TIMEOUT_MS = 10000;
+const IDB_TIMEOUT_MS = TIMEOUTS.IDB_MS;
 
 /** @returns {Promise<IDBDatabase>} */
 function openDb() {

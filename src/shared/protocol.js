@@ -10,6 +10,7 @@
  *
  * Responses: { id, ok, result?, error? } where error is { message, code }.
  */
+import { TIMEOUTS } from './constants.js';
 
 let counter = 0;
 
@@ -59,7 +60,7 @@ export function isResponse(msg) {
  * @param {object} message
  * @param {{ timeoutMs?: number }} [opts]
  */
-export async function sendRequest(message, { timeoutMs = 120000 } = {}) {
+export async function sendRequest(message, { timeoutMs = TIMEOUTS.MESSAGE_MS } = {}) {
   return await withTimeout(chrome.runtime.sendMessage(message), timeoutMs, message.type);
 }
 

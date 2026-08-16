@@ -85,3 +85,31 @@ export const OFFSCREEN_DOCUMENT_PATH = 'pages/offscreen.html';
 
 /** Analysis cache: max entries keyed by content hash. */
 export const ANALYSIS_CACHE_MAX_ENTRIES = 512;
+
+/**
+ * Timeout / size budget constants (ms / bytes). Centralized so latency and resource
+ * bounds are tuned in one place. Each name encodes its unit.
+ */
+export const TIMEOUTS = Object.freeze({
+  /** Generic message round-trip (content script <-> SW) default. */
+  MESSAGE_MS: 120000,
+  /** Quick UI reads (status/settings/stats) — should be near-instant. */
+  UI_QUERY_MS: 15000,
+  /** Fast pings + site toggles. */
+  PING_MS: 10000,
+  /** Offscreen session warm-up (model load + first inference can be slow). */
+  INFERENCE_INIT_MS: 180000,
+  /** One full image analysis (multi-view) inside the offscreen document. */
+  ANALYZE_MS: 120000,
+  /** One-time model download (hundreds of MB over a slow link). */
+  MODEL_DOWNLOAD_MS: 600000,
+  /** Bound on every IndexedDB operation so a hung store can't stall a worker. */
+  IDB_MS: 10000,
+  /** WebGPU probe self-test budget before falling back to WASM. */
+  WEBGPU_PROBE_MS: 8000,
+  /** MutationObserver debounce for image discovery. */
+  OBSERVER_DEBOUNCE_MS: 400,
+});
+
+/** Hard safety cap on a single fetched image's byte size (32 MiB). */
+export const MAX_IMAGE_BYTES = 32 * 1024 * 1024;
