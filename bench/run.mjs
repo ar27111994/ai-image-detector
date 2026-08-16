@@ -13,7 +13,8 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
-import { aiProbability, preprocessRgba } from '../src/shared/preprocess.js';
+import { preprocessRgba } from '../src/shared/preprocess.js';
+import { softmaxProbability } from '../src/shared/math.js';
 import { resolveModel } from './model-loader.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -102,7 +103,9 @@ async function main() {
         //  - outputType 'p_real': calibrated p(real) scalar (temperature+sigmoid baked in),
         //    so AI probability = 1 - p_real               [wkaandemir]
         const score =
-          spec.outputType === 'p_real' ? 1 - output[0] : aiProbability(output, spec.aiLogitIndex);
+          spec.outputType === 'p_real'
+            ? 1 - output[0]
+            : softmaxProbability(output, spec.aiLogitIndex);
         outLines.push(
           JSON.stringify({
             id: entry.id,

@@ -10,6 +10,7 @@
  *    conservative (near-passthrough of the neural score) until calibration is fitted.
  */
 import { VERDICT } from '../constants.js';
+import { clamp01 } from '../math.js';
 import { CALIBRATION } from './calibration.js';
 
 const DEFAULT_THRESHOLD = 0.65;
@@ -63,8 +64,4 @@ export function verdictFor(score, threshold = DEFAULT_THRESHOLD) {
   if (score >= threshold) return VERDICT.AI;
   if (score < 1 - threshold) return VERDICT.REAL;
   return VERDICT.UNCERTAIN;
-}
-
-function clamp01(x) {
-  return Math.min(1, Math.max(0, x));
 }

@@ -67,11 +67,15 @@ export async function putModelBlob(key, blob) {
 export async function getModelBlob(key) {
   const db = await openDb();
   try {
-    return await new Promise((resolve, reject) => {
-      const req = db.transaction(MODEL_STORE, 'readonly').objectStore(MODEL_STORE).get(key);
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-    });
+    return await withTimeout(
+      new Promise((resolve, reject) => {
+        const req = db.transaction(MODEL_STORE, 'readonly').objectStore(MODEL_STORE).get(key);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      }),
+      IDB_TIMEOUT_MS,
+      'indexedDB.get',
+    );
   } finally {
     db.close();
   }

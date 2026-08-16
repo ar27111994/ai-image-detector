@@ -116,20 +116,3 @@ export function preprocessRgba(rgba, width, height, spec) {
   const resized = resizeRgbaBilinear(rgba, width, height, size, size);
   return rgbaToChwTensor(resized, size, size, spec);
 }
-
-/**
- * Softmax over a 2-class logit pair, returning the probability of `aiIndex`.
- * Numerically stable.
- *
- * @param {Float32Array | number[]} logits
- * @param {number} aiIndex index of the "AI-generated" class
- */
-export function aiProbability(logits, aiIndex) {
-  if (logits.length < 2) throw new RangeError('expected at least 2 logits');
-  const a = logits[aiIndex];
-  const b = logits[aiIndex === 0 ? 1 : 0];
-  const m = Math.max(a, b);
-  const ea = Math.exp(a - m);
-  const eb = Math.exp(b - m);
-  return ea / (ea + eb);
-}

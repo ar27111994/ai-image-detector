@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
-  aiProbability,
   preprocessRgba,
   resizeRgbaBilinear,
   rgbaToChwTensor,
 } from '../../src/shared/preprocess.js';
+import { softmaxProbability } from '../../src/shared/math.js';
 
 describe('resizeRgbaBilinear', () => {
   it('returns a copy when dimensions already match', () => {
@@ -98,23 +98,23 @@ describe('preprocessRgba', () => {
   });
 });
 
-describe('aiProbability', () => {
+describe('softmaxProbability', () => {
   it('returns ~1 when AI logit dominates', () => {
-    expect(aiProbability([0, 10], 1)).toBeCloseTo(0.99995, 4);
+    expect(softmaxProbability([0, 10], 1)).toBeCloseTo(0.99995, 4);
   });
   it('returns ~0 when real logit dominates', () => {
-    expect(aiProbability([10, 0], 1)).toBeCloseTo(0.0000454, 4);
+    expect(softmaxProbability([10, 0], 1)).toBeCloseTo(0.0000454, 4);
   });
   it('returns 0.5 for a tie', () => {
-    expect(aiProbability([3, 3], 1)).toBeCloseTo(0.5);
+    expect(softmaxProbability([3, 3], 1)).toBeCloseTo(0.5);
   });
   it('is numerically stable for large logits', () => {
-    expect(aiProbability([1000, 1001], 1)).toBeCloseTo(0.7310586, 4);
+    expect(softmaxProbability([1000, 1001], 1)).toBeCloseTo(0.7310586, 4);
   });
   it('respects aiLogitIndex=0', () => {
-    expect(aiProbability([10, 0], 0)).toBeCloseTo(0.99995, 4);
+    expect(softmaxProbability([10, 0], 0)).toBeCloseTo(0.99995, 4);
   });
   it('rejects single-logit output', () => {
-    expect(() => aiProbability([1], 1)).toThrow(RangeError);
+    expect(() => softmaxProbability([1], 1)).toThrow(RangeError);
   });
 });

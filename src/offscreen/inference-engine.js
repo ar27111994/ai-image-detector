@@ -13,6 +13,7 @@ import * as ort from 'onnxruntime-web';
 import { preprocessRgba } from '../shared/preprocess.js';
 import { getModelBlob } from '../shared/model-store.js';
 import { computeViewRects, meanLogits } from '../shared/tta.js';
+import { clamp01 } from '../shared/math.js';
 
 /** Ordered EP preference; wasm is the guaranteed fallback. */
 const EP_PREFERENCE = ['webgpu', 'wasm'];
@@ -209,10 +210,6 @@ export function scoreFromOutput(output, spec) {
   const ea = Math.exp(a - m);
   const eb = Math.exp(b - m);
   return clamp01(ea / (ea + eb));
-}
-
-function clamp01(x) {
-  return Math.min(1, Math.max(0, x));
 }
 
 /** Current engine status (for diagnostics / popup). */
