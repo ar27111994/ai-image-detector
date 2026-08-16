@@ -23,9 +23,9 @@
 
 Coverage targets the pure, platform-independent logic (`src/shared/**`) plus the model manager
 (`src/background/model-manager.js`). The vitest config enforces a **90% floor on lines, branches,
-functions, and statements** (currently <!-- AUTO:COV_LINES -->96.8<!-- /AUTO:COV_LINES --> lines /
+functions, and statements** (currently <!-- AUTO:COV_LINES -->96.9<!-- /AUTO:COV_LINES --> lines /
 
-<!-- AUTO:COV_BRANCHES -->90.4<!-- /AUTO:COV_BRANCHES --> branches / <!-- AUTO:COV_FUNCS -->92.8<!-- /AUTO:COV_FUNCS --> functions).
+<!-- AUTO:COV_BRANCHES -->91.0<!-- /AUTO:COV_BRANCHES --> branches / <!-- AUTO:COV_FUNCS -->93.1<!-- /AUTO:COV_FUNCS --> functions).
 
 Runtime glue (SW router, offscreen inference engine, content script, pages) is covered by the
 integration (mock-chrome) and e2e suites — the only faithful environments for those APIs.
