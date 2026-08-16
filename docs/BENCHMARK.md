@@ -43,17 +43,17 @@ Ensembles (mean/max/OR) do not beat haywoodsloan alone — its precision dominat
 Threshold 0.65. The shipped pipeline applies Platt calibration (fitted on the train split) and the
 fusion layer; this is the number that must clear the bounty bar.
 
-| Split                               | n    | TPR       | TNR       | **Balanced Acc** | 95% CI         |
-| ----------------------------------- | ---- | --------- | --------- | ---------------- | -------------- |
-| Raw (uncalibrated neural only)      | 471  | 63.6%     | 99.4%     | 81.5%            | [77.3%, 84.3%] |
-| **Raw (full pipeline, calibrated)** | 471  | **82.0%** | **87.1%** | **84.5%**        | [79.1%, 88.7%] |
-| Augmented (jpeg70/85, resize50)     | 1413 | 61.7%     | 99.6%     | 80.6%            | [79.0%, 82.3%] |
+| Split                                                | n    | TPR   | TNR   | **Balanced Acc** | ECE   | 95% CI         |
+| ---------------------------------------------------- | ---- | ----- | ----- | ---------------- | ----- | -------------- |
+| Raw (shipped calibration)                            | 471  | 82.6% | 85.8% | **84.20%**       | 0.047 | [78.7%, 88.4%] |
+| Augmented (jpeg70/85, resize50; shipped calibration) | 1413 | 78.4% | 87.9% | **83.13%**       | 0.034 | [70.3%, 91.2%] |
 
-Per-augmentation (uncalibrated): jpeg70 78.8%, jpeg85 80.7%, resize50 82.4%.
+Per-augmentation detail (uncalibrated): jpeg70 78.8%, jpeg85 80.7%, resize50 82.4%.
 
-**Result: 84.5% balanced accuracy @ 0.65 on the raw internal benchmark — above the 75% bounty bar
-and the 80% internal safety gate.** Platt calibration lifts recall to 82% while holding precision
-high.
+**Result: 84.20% balanced accuracy @ 0.65 on the raw internal benchmark, 83.13% on the augmented
+split — both under the exact calibration the extension ships, both above the 75% bounty bar and
+the 80% internal safety gate.** Numbers recomputed by `node tools/sync-docs.mjs` from the results
+files — never hand-edited.
 
 ### TTA experiment (measured, rejected)
 
