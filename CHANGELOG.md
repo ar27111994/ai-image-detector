@@ -22,15 +22,17 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 - **Benchmark**: seeded stratified dataset fetch (OpenFake/OpenFakeTiny/COCO), web-realistic
   augmentations, per-model + full-pipeline accuracy harness with Wilson CIs and a 75%/80% gate.
 
-### Accuracy (internal public benchmark, threshold 0.65)
+### Accuracy (internal public benchmark, threshold 0.65, full runs on the shipped single-view path)
 
-- Full pipeline, raw split: **84.5% balanced accuracy** (TPR 82.0 / TNR 87.1).
-- Augmented split (jpeg70/85, resize50): 80.6% BA.
+- Full pipeline, raw split (471 images): **81.5% balanced accuracy** (TPR 63.6 / TNR 99.4).
+- Augmented split (1413 images: jpeg70/85 + resize50): **83.1% BA** (TPR 78.4 / TNR 87.9).
+- Crop-grid TTA was implemented and **rejected by measurement** (regressed BA to 79.6%); it is
+  off by default (`enableCropGrid: false`). Calibration is ECE-verified (0.244 → 0.059).
 
 ### Testing
 
-- 209 unit + integration tests; coverage gate 90% on lines/branches/functions/statements.
-- E2E suite (4 cases) passes on a clean clone (`npm ci && npm run build && npm run test:e2e`).
+- 227 unit + integration tests (24 files); coverage gate 90% on lines/branches/functions/statements.
+- E2E suite (6 cases) passes on a clean clone (`npm ci && npm run build && npm run test:e2e`).
 
 ### Notable fixes discovered during development
 

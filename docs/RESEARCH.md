@@ -7,19 +7,20 @@ citations were gathered from primary sources; this file records the actionable c
 
 ## Where we already are (honest baseline)
 
-- Our pipeline: **84.5% balanced accuracy** (clean) / **80.6%** (web-augmented) @ 0.65 on a
-  471-image, 47-generator modern set.
+- Our pipeline: **81.5% balanced accuracy** (raw, calibrated) / **83.1%** (web-augmented) @ 0.65 on
+  a 471-image, 47-generator modern set (full runs, measured on the shipped single-view path).
 - 2026 reference points: DailyBench shows methods reporting 91–96% on GenImage drop to **60–76%**
   on modern web-realistic generators (FakeBench) and **54–66%** on manipulation/inpainting.
-  **Our numbers are within ~4–6 points of practical SOTA on web-realistic data.**
+  **Our numbers are within the practical SOTA band on web-realistic data (76–86%).**
 
 ## What's genuinely actionable (ranked by value/cost)
 
 ### Do now (no retraining)
 
 1. **Multi-crop TTA at inference** — average logits over the full frame + 2 corner crops.
-   Est. **+1.5–2.5% BA** (more under augmentation) for ~3× latency. Cheap; uses the existing
-   pipeline. (Patch aggregation already ships; extending it to logit-averaging TTA is the win.)
+   Est. **+1.5–2.5% BA** (research estimate). ⚠️ **Measured on our SwinV2 it REGRESSED** (BA
+   81.5% → 79.6%): crops discard the global artifacts this model keys on. Implemented but off by
+   default (`enableCropGrid: false`); revisit only with a patch-token architecture (PatchHead).
 2. **Temperature scaling for calibration** — replace/verify Platt with temperature scaling fitted
    on a held-out _training_ split (never the eval set) to minimize ECE; threshold at 0.5 of the
    calibrated probability. Est. **+1–3%** at the operating point and _removes_ eval-set tuning

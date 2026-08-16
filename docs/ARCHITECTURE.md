@@ -67,15 +67,17 @@ bytes in IndexedDB. Thereafter the extension is fully offline; weights are never
 
 ## Robustness techniques
 
-- **Patch aggregation**: images larger than 2× the model input are scored as full-frame plus a
-  center+corner crop grid and averaged — downscaling alone washes out the high-frequency
-  generator artifacts the detector uses.
+- **Single-view full-frame inference** (default): the SwinV2 model keys on global generation
+  artifacts, so the image is resized to the model input and scored once. A multi-view crop-grid
+  TTA path exists (`src/shared/tta.js`) but is **off by default** — it measurably _reduced_
+  accuracy on this model (BA 81.5% → 79.6%); it can be enabled for architectures that benefit.
 - **Spectral features**: 2D-FFT radial spectrum + high-frequency ratio feed the fusion layer as
   a weak, bounded nudge (never a standalone verdict).
 - **Forensic fast path**: C2PA/PNG-geninfo/XMP-DigitalSourceType/EXIF-generator signatures are
   near-zero-FP and short-circuit to a definitive AI verdict.
-- **Calibration**: Platt logistic fitted on the internal public benchmark train split so the
-  bounty's 0.65 operating point coincides with the balanced-accuracy optimum.
+- **Calibration**: Platt logistic fitted on the internal public benchmark train split (never the
+  evaluation set) so the bounty's 0.65 operating point coincides with the balanced-accuracy
+  optimum; calibration quality is ECE-verified each fit.
 
 ## Privacy & security posture
 
