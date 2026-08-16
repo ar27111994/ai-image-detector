@@ -55,6 +55,20 @@ Per-augmentation (uncalibrated): jpeg70 78.8%, jpeg85 80.7%, resize50 82.4%.
 and the 80% internal safety gate.** Platt calibration lifts recall to 82% while holding precision
 high.
 
+### TTA experiment (measured, rejected)
+
+Multi-view crop-grid TTA (full frame + center/4-corner 50% crops, logits averaged pre-softmax) was
+implemented and measured on the full 471-image set: **BA 79.6%** — a _regression_ vs single-view
+81.5%. Crops discard the global generation artifacts SwinV2 relies on (22 images flipped wrong vs
+10 helped). The crop grid is **off by default** (`computeViewRects(..., { enableCropGrid: false })`)
+and available only for architectures that benefit (e.g. DINOv2+PatchHead).
+
+### Calibration quality (ECE-verified)
+
+Platt refit on the corrected single-view path: held-out test BA 80.7% → 82.8%, **ECE 0.244 →
+0.059** (≈4× better calibrated). The ECE metric (`src/shared/metrics.js`) objectively verifies
+calibration quality each run and would catch a counterproductive fit.
+
 ## Key findings
 
 1. **2022–2023-era fine-tunes collapse on modern generators** (dima806 TPR 0% on Flux/MJ/SD3.5) —
