@@ -22,3 +22,14 @@ updates:
     schedule:
       interval: weekly
     labels: ['ci']
+
+  # Python tooling used for model conversion/quantization (tools/*.py). These are dev-only
+  # (never shipped in the extension) but are kept current for reproducibility + supply-chain
+  # hygiene.
+  - package-ecosystem: pip
+    directory: '/tools'
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    labels: ['dependencies', 'tooling']

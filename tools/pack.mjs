@@ -8,6 +8,7 @@
  * Usage: npm run build && npm run pack [--bundled]
  */
 import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFile } from 'node:child_process';
@@ -70,7 +71,6 @@ async function stageBundledModel(stageDir) {
   }
 
   // Verify integrity against the manifest pin before embedding.
-  const { createHash } = await import('node:crypto');
   const sha = createHash('sha256').update(bytes).digest('hex');
   if (variant.sha256 && sha !== variant.sha256) {
     throw new Error(`bundled model SHA-256 mismatch: expected ${variant.sha256}, got ${sha}`);
@@ -116,6 +116,25 @@ async function main() {
       await rm(stageDir, { recursive: true, force: true });
     }
   }
+
+  // Emit SHA256SUMS for every published artifact so users/CI can verify downloads.
+  await writeChecksums();
+}
+
+/** Write release/SHA256SUMS covering every zip + .onnx in release/. */
+async function writeChecksums() {
+  const artifacts = (await readdir(releaseDir)).filter(
+    (f) => f.endsWith('.zip') || f.endsWith('.onnx'),
+  );
+  const lines = [];
+  for (const f of artifacts.sort()) {
+    const digest = createHash('sha256')
+      .update(await readFile(path.join(releaseDir, f)))
+      .digest('hex');
+    lines.push(`${digest}  ${f}`);
+  }
+  await writeFile(path.join(releaseDir, 'SHA256SUMS'), lines.join('\n') + '\n', 'utf8');
+  console.log(`[pack] wrote SHA256SUMS (${artifacts.length} artifacts)`);
 }
 
 main().catch((err) => {

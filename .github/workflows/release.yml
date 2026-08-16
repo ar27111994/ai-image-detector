@@ -19,6 +19,28 @@ jobs:
           node-version: '24'
           cache: npm
 
+      - name: Validate release tag + version sync
+        shell: pwsh
+        run: |
+          $tag = '${{ github.ref_name }}'
+          if ($tag -notmatch '^v\d+\.\d+\.\d+(-[\w.]+)?$') {
+            throw "Tag '$tag' is not a semantic version (expected vMAJOR.MINOR.PATCH)."
+          }
+          $tagVersion = $tag -replace '^v', ''
+          $pkg = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $manifest = (Get-Content extension/manifest.json -Raw | ConvertFrom-Json).version
+          if ($tagVersion -ne $pkg) { throw "tag $tag != package.json version $pkg" }
+          if ($tagVersion -ne $manifest) { throw "tag $tag != manifest.json version $manifest" }
+          Write-Host "tag $tag matches package.json + manifest.json ($tagVersion)"
+
+      - name: Verify clean, up-to-date source tree
+        shell: pwsh
+        run: |
+          git fetch --tags --force | Out-Null
+          $status = git status --porcelain
+          if ($status) { throw "working tree is dirty:`n$status" }
+          Write-Host 'working tree clean'
+
       - name: Install (locked)
         run: npm ci
 
@@ -45,6 +67,7 @@ jobs:
           files: |
             release/ai-image-detector-*.zip
             release/*.onnx
+            release/SHA256SUMS
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
