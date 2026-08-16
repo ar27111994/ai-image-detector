@@ -115,7 +115,7 @@ JPEG-recompress/resize augmentations), threshold 0.65:
 
 ```bash
 npm run dev        # watch-mode build
-npm test           # unit + integration tests (<!-- AUTO:TEST_COUNT -->263<!-- /AUTO:TEST_COUNT -->)
+npm test           # unit + integration tests (<!-- AUTO:TEST_COUNT -->264<!-- /AUTO:TEST_COUNT -->)
 npm run cover      # coverage (v8, gated)
 npm run test:e2e   # end-to-end in headless Chrome-for-Testing (6 cases)
 npm run lint       # eslint (blocks CI)

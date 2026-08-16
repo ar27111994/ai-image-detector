@@ -81,7 +81,31 @@ async function ensureOffscreenDocument() {
   }
 }
 
-/** Warm the inference session inside the offscreen document (idempotent; dedupes concurrent calls). */
+/**
+ * Force-recreate the offscreen document after a suspected crash/stale context. Closes any
+ * existing (unresponsive) document first so the next ensure-offscreen call starts clean.
+ * Closing a healthy document is safe — the next request just recreates it.
+ */
+async function recreateOffscreenDocument() {
+  const url = chrome.runtime.getURL(OFFSCREEN_DOCUMENT_PATH);
+  try {
+    await chrome.offscreen.closeDocument();
+  } catch {
+    /* no document to close — fine */
+  }
+  // Re-verify none remains, then drop the cached-manifest/session guards so a fresh create
+  // + warm-up happens on the next ensure call.
+  const existing = await chrome.runtime
+    .getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'], documentUrls: [url] })
+    .catch(() => []);
+  if (existing.length === 0) return;
+}
+
+/**
+ * Warm the inference session inside the offscreen document (idempotent; dedupes concurrent
+ * calls). If the warm-up fails because the offscreen document is gone or unresponsive (e.g. it
+ * was killed), the document is recreated once and the warm-up retried before surfacing the error.
+ */
 async function ensureInferenceReady() {
   if (!(await modelManager.isModelReady())) {
     throw Object.assign(new Error('model not downloaded — complete setup first'), {
@@ -90,7 +114,19 @@ async function ensureInferenceReady() {
   }
   await ensureOffscreenDocument();
   if (!cachedManifest) cachedManifest = await modelManager.loadManifest();
+  try {
+    return await warmSession();
+  } catch (err) {
+    // Recover from a crashed/stale offscreen document once: recreate + warm again.
+    console.warn('[ai-detector] inference warm-up failed, recreating offscreen doc:', err?.message);
+    await recreateOffscreenDocument();
+    await ensureOffscreenDocument();
+    return await warmSession();
+  }
+}
 
+/** Single warm-up attempt (dedupes concurrent callers via initializingSession). */
+async function warmSession() {
   if (initializingSession) return await initializingSession;
   initializingSession = sendRequest(
     {

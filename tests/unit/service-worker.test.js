@@ -159,4 +159,41 @@ describe('service-worker router', () => {
     expect(res.result.reason).toBe('site-disabled');
     expect(offscreenCalls).toBe(0);
   });
+
+  it('recovers when the offscreen document fails once (recreate + retry)', async () => {
+    // First ENSURE_READY fails (simulating a crashed offscreen doc); the SW should recreate
+    // the document and retry, succeeding on the second attempt.
+    let ensureAttempts = 0;
+    let closeCalls = 0;
+    chromeStub.chrome.offscreen.closeDocument = async () => {
+      closeCalls++;
+    };
+    chromeStub.chrome.runtime.getContexts = async () => []; // after close, none remain
+    chromeStub.chrome.runtime.sendMessage = async (msg) => {
+      if (msg.type === MSG.OFFSCREEN_ENSURE_READY) {
+        ensureAttempts++;
+        if (ensureAttempts === 1) {
+          return { id: msg.id, ok: false, error: { message: 'offscreen gone', code: 'NO_DOC' } };
+        }
+        return { id: msg.id, ok: true, result: { ep: 'wasm', variant: 'primary-int8' } };
+      }
+      if (msg.type === MSG.OFFSCREEN_ANALYZE) {
+        offscreenCalls++;
+        return {
+          id: msg.id,
+          ok: true,
+          result: { score: 0.5, verdict: 'uncertain', reasons: [], ep: 'wasm', latencyMs: 1 },
+        };
+      }
+      return { id: msg.id, ok: true, result: {} };
+    };
+
+    const res = await dispatch(
+      req(MSG.ANALYZE_IMAGE, { url: 'https://cdn.example/recover.png' }),
+      pageSender,
+    );
+    expect(res.ok).toBe(true);
+    expect(ensureAttempts).toBe(2); // failed once, retried after recreate
+    expect(closeCalls).toBeGreaterThan(0); // recovery closed the stale document
+  });
 });
