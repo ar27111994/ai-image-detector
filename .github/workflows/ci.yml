@@ -91,11 +91,38 @@ jobs:
         run: |
           $required = @('dist/manifest.json', 'dist/background.js', 'dist/offscreen.js', `
             'dist/content.js', 'dist/pages/offscreen.html', 'dist/pages/popup.html', `
-            'dist/pages/tokens.css', 'dist/vendor/ort-wasm-simd-threaded.jsep.wasm')
+            'dist/pages/tokens.css', 'dist/vendor/ort-wasm-simd-threaded.jsep.wasm', `
+            'dist/LICENSE', 'dist/NOTICE')
           foreach ($f in $required) {
             if (-not (Test-Path $f)) { throw "missing $f" }
           }
           Write-Host 'dist layout OK'
+      - name: Validate manifest schema (MV3)
+        shell: pwsh
+        run: |
+          $m = Get-Content dist/manifest.json -Raw | ConvertFrom-Json
+          if ($m.manifest_version -ne 3) { throw "manifest_version must be 3, got $($m.manifest_version)" }
+          foreach ($field in 'name','version','background','permissions','content_security_policy') {
+            if (-not $m.$field) { throw "manifest missing required field: $field" }
+          }
+          if (-not $m.background.service_worker) { throw 'manifest.background.service_worker missing' }
+          # Every declared icon must exist in dist.
+          foreach ($prop in $m.icons.PSObject.Properties) {
+            if (-not (Test-Path "dist/$($prop.Value)")) { throw "declared icon missing: $($prop.Value)" }
+          }
+          # Content script must be IIFE (no top-level ESM import/export) — classic-script world.
+          $cs = Get-Content dist/content.js -Raw
+          if ($cs -match '(?m)^\s*(import|export)\s') { throw 'dist/content.js contains ESM syntax (must be IIFE)' }
+          Write-Host 'manifest schema + content-script format OK'
+      - name: Verify bundled model manifest pins a SHA-256
+        shell: pwsh
+        run: |
+          $mm = Get-Content dist/models/manifest.json -Raw | ConvertFrom-Json
+          foreach ($v in $mm.variants) {
+            if ($v.sha256 -notmatch '^[0-9a-f]{64}$') { throw "variant $($v.key) has no valid sha256 pin" }
+            if (-not $v.url) { throw "variant $($v.key) missing url" }
+          }
+          Write-Host 'model manifest integrity pins OK'
       - name: Upload dist artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

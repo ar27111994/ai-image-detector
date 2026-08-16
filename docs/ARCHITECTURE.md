@@ -31,7 +31,7 @@ download at first-run setup, all inference is offline.
 │  - EP selection: WebGPU (fp16) with timed self-test -> WASM (int8/fp32)   │
 │  - decode (createImageBitmap) -> OffscreenCanvas RGBA -> preprocess       │
 │  - forensic layer (PNG/JPEG/XMP/C2PA/WebP byte parsers)                   │
-│  - spectral features (2D FFT) + calibrated fusion -> score + verdict      │
+│  - calibrated fusion (neural + forensic) -> score + verdict               │
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -71,13 +71,34 @@ bytes in IndexedDB. Thereafter the extension is fully offline; weights are never
   artifacts, so the image is resized to the model input and scored once. A multi-view crop-grid
   TTA path exists (`src/shared/tta.js`) but is **off by default** — it measurably _reduced_
   accuracy on this model (BA 81.5% → 79.6%); it can be enabled for architectures that benefit.
-- **Spectral features**: 2D-FFT radial spectrum + high-frequency ratio feed the fusion layer as
-  a weak, bounded nudge (never a standalone verdict).
 - **Forensic fast path**: C2PA/PNG-geninfo/XMP-DigitalSourceType/EXIF-generator signatures are
   near-zero-FP and short-circuit to a definitive AI verdict.
 - **Calibration**: Platt logistic fitted on the internal public benchmark train split (never the
   evaluation set) so the bounty's 0.65 operating point coincides with the balanced-accuracy
   optimum; calibration quality is ECE-verified each fit.
+
+> **Spectral (2D-FFT) module — status.** `src/shared/metadata/spectral.js` implements the
+> FFT-based radial-spectrum / high-frequency-ratio features and is fully unit-tested
+> (`tests/unit/spectral.test.js`). It is **not currently wired into the shipped fusion layer**:
+> under the shipped int8 model + Platt calibration, the neural + forensic fusion already clears
+> the accuracy gates, and adding the spectral term did not improve the measured result on the
+> internal benchmark. The module is retained (and exercised by tests) as a research artifact so it
+> can be re-enabled behind a calibration refit if a future model/dataset benefits. See
+> `docs/RESEARCH.md` and `.planning/TECH-DEBT.md`.
+
+## MV3 service-worker lifecycle
+
+The service worker is killed after ~30s idle and restarted on demand. Design consequences:
+
+- **No model/state is held in the SW.** The ONNX session lives in the offscreen document; the
+  model bytes live in IndexedDB. A SW restart therefore loses nothing essential.
+- **In-memory dedup/cache is best-effort.** The analysis LRU cache and the concurrent-identical
+  inflight map are in-memory and reset on restart. This is a deliberate tradeoff: a restart only
+  means a repeated image is re-analyzed once (never a correctness bug, just a cache miss). The
+  offscreen document holds the warm session, so the cost of a restart is small.
+- **Offscreen recovery.** If the offscreen document is killed or unresponsive, the SW detects the
+  failed warm-up, closes the stale document, recreates it, and retries once before surfacing an
+  error (see `ensureInferenceReady` / `recreateOffscreenDocument` in `service-worker.js`).
 
 ## Privacy & security posture
 
