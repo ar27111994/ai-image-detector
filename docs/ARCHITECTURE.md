@@ -63,7 +63,9 @@ and excludes patch-embedding Conv nodes (ORT CPU/WASM lack ConvInteger kernels).
 `models/manifest.json` (bundled) pins each variant's URL + SHA-256 + input spec + label
 semantics. At first-run onboarding the SW downloads the variant, verifies SHA-256, and stores the
 bytes in IndexedDB. Thereafter the extension is fully offline; weights are never re-downloaded
-(the bounty rule). Reproducible conversion is in `tools/` (see docs/MODEL.md).
+(the bounty rule). Reproducible conversion is in `tools/` (see docs/MODEL.md). Concurrent
+download starts share a single in-flight `ensureModel` promise, so a retry after a timed-out
+onboarding request waits for the same operation instead of fetching and hashing twice.
 
 ## Robustness techniques
 
@@ -99,6 +101,9 @@ The service worker is killed after ~30s idle and restarted on demand. Design con
 - **Offscreen recovery.** If the offscreen document is killed or unresponsive, the SW detects the
   failed warm-up, closes the stale document, recreates it, and retries once before surfacing an
   error (see `ensureInferenceReady` / `recreateOffscreenDocument` in `service-worker.js`).
+- **EP fallback releases failed sessions.** During adaptive EP selection, a WebGPU session whose
+  self-test probe rejects or times out is `.release()`d before the engine falls through to WASM
+  (`createSessionForEp` in `inference-engine.js`), so a failed GPU context never leaks.
 
 ## Privacy & security posture
 

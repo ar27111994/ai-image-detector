@@ -76,7 +76,7 @@ async function decodeItxt(data) {
     return data.slice(0, i++).length ? i : i; // position advance
   };
   // keyword
-  let start = 0;
+  const start = 0;
   while (i < data.length && data[i] !== 0) i++;
   const key = new TextDecoder('utf-8').decode(data.slice(start, i));
   i++; // null
@@ -84,9 +84,8 @@ async function decodeItxt(data) {
   const compressionFlag = data[i++];
   const compressionMethod = data[i++];
   readNull(); // language tag
-  start = i;
-  while (i < data.length && data[i] !== 0) i++;
-  i++; // translated keyword
+  while (i < data.length && data[i] !== 0) i++; // translated keyword
+  i++;
   let value;
   if (compressionFlag === 1 && compressionMethod === 0) {
     const inflated = await inflate(data.slice(i));

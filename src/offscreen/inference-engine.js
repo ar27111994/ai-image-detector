@@ -102,13 +102,20 @@ async function createSessionForEp(bytes, ep, variant) {
   const created = await ort.InferenceSession.create(bytes, opts);
   if (ep === 'webgpu') {
     // Self-test: one inference on a zero tensor, bounded in time. A GPU that hangs here must
-    // not be trusted for production.
+    // not be trusted for production. If the probe rejects or times out, `created` is a live
+    // session that is never assigned to the global `session` — release it here so the failed
+    // WebGPU context doesn't leak GPU/native resources before we fall through to WASM.
     const size = variant.inputSize;
     const probe = new Float32Array(3 * size * size);
     const feeds = {
       [created.inputNames[0]]: new ort.Tensor('float32', probe, [1, 3, size, size]),
     };
-    await runWithTimeout(created, feeds, WEBGPU_PROBE_BUDGET_MS);
+    try {
+      await runWithTimeout(created, feeds, WEBGPU_PROBE_BUDGET_MS);
+    } catch (err) {
+      await created.release().catch(() => {}); // release errors are non-fatal
+      throw err;
+    }
   }
   return created;
 }

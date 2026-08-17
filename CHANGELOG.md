@@ -38,16 +38,25 @@ into the v1.0.0 submission.
   (softmax moved to `math.js`); all timeout/byte budgets centralized in `shared/constants.js`
   (`TIMEOUTS`, `MAX_IMAGE_BYTES`); model-variant selection shared via `shared/model-variant.js`.
 - `getModelBlob` (IndexedDB) is now time-bounded like every other store op.
+- **Model-download starts are deduplicated.** `startModelDownload` now shares one in-flight
+  `ensureModel` promise, so a retry after a timed-out onboarding request no longer downloads and
+  hashes the ~311MB model twice or races `downloading`/`error`/`ready` state writes.
+- **Failed WebGPU sessions are released.** When the WebGPU self-test probe rejects or times out,
+  the created-but-rejected session is now `.release()`d before falling back to WASM, so a failed
+  WebGPU context no longer leaks GPU/native resources.
+- CodeQL hygiene: removed a dead assignment in the PNG iTXt parser; collapsed a stat-then-read
+  TOCTOU window in `tools/pack.mjs` to a single read.
 
 ### Testing
 
-- **427 tests / 34 files** (was 227/24 at v1.0.0). New unit suites for the previously untested
+- **430 tests / 34 files** (was 227/24 at v1.0.0). New unit suites for the previously untested
   popup/options/onboarding pages, the offscreen orchestrator, and the service-worker router
   (sender auth, cache, stampede dedup, site-disable). Concurrency/stress suites (50-unique and
-  50-identical-image stampedes verifying exactly-once inference and cache-collapse), adversarial
-  security suites (prototype-pollution, hostile message envelopes, full-pipeline XSS through a
-  hostile A1111 PNG), and edge/corrupt-input parsers. Integration dispatch harness de-flaked
-  (event-driven latch replaces fixed sleeps). Coverage gate ≥90% (98.5/91.3/98.0 measured).
+  50-identical-image stampedes verifying exactly-once inference and cache-collapse, plus a
+  concurrent-download dedup test), adversarial security suites (prototype-pollution, hostile
+  message envelopes, full-pipeline XSS through a hostile A1111 PNG), WebGPU session-leak release
+  tests, and edge/corrupt-input parsers. Integration dispatch harness de-flaked (event-driven
+  latch replaces fixed sleeps). Coverage gate ≥90% (98.6/91.5/98.0 measured).
 
 ### Fixed (accuracy documentation)
 

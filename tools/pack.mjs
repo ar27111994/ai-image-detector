@@ -7,7 +7,7 @@
  *
  * Usage: npm run build && npm run pack [--bundled]
  */
-import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -58,10 +58,11 @@ async function stageBundledModel(stageDir) {
   const dest = path.join(destDir, `${variant.key}.onnx`);
 
   // Reuse a cached copy if present and hash-matches; else download from the pinned URL.
+  // Single readFile in try (no stat-then-read) so there's no TOCTOU window between an existence
+  // check and the read.
   let bytes;
   const cached = path.join(cacheDir, 'haywoodsloan-int8.onnx');
   try {
-    await stat(cached);
     bytes = await readFile(cached);
   } catch {
     console.log(`[pack] downloading model for bundle: ${variant.url}`);

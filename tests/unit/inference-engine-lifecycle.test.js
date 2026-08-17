@@ -44,11 +44,14 @@ vi.mock('onnxruntime-web', () => {
   return {
     env,
     Tensor: FakeTensor,
+    __FakeSession: FakeSession, // exposed so tests can inspect/track created instances
     InferenceSession: {
       create: vi.fn(async (bytes, opts) => {
         const ep = opts.executionProviders[0];
         if (sessionBehavior.failOn.has(ep)) throw new Error(`${ep} init failed`);
-        return new FakeSession(bytes, opts);
+        const s = new FakeSession(bytes, opts);
+        sessionBehavior.created?.push(s); // opt-in instance tracking
+        return s;
       }),
     },
   };
@@ -112,6 +115,7 @@ beforeEach(() => {
   sessionBehavior.failOn = new Set();
   sessionBehavior.hangProbe = false;
   sessionBehavior.runOutput = [5, -5];
+  sessionBehavior.created = null; // null = don't track; a test opts in by setting an array
 });
 
 describe('inference-engine lifecycle', () => {
@@ -168,6 +172,44 @@ describe('inference-engine lifecycle', () => {
     const status = await engine.loadSession(MANIFEST, pickVariant);
     expect(status.ep).toBe('wasm');
   }, 15000);
+
+  it('releases the WebGPU session when its probe times out (no GPU resource leak)', async () => {
+    sessionBehavior.created = []; // opt-in instance tracking
+    sessionBehavior.hangProbe = true; // webgpu run() never resolves -> probe times out
+    const engine = await freshEngine();
+    const status = await engine.loadSession(MANIFEST, pickVariant);
+    expect(status.ep).toBe('wasm'); // fell back after the probe timed out
+
+    const webgpu = sessionBehavior.created.find((s) => s.opts.executionProviders[0] === 'webgpu');
+    const wasm = sessionBehavior.created.find((s) => s.opts.executionProviders[0] === 'wasm');
+    expect(webgpu).toBeDefined();
+    // The failed WebGPU session was created but never assigned to the global `session`, so the
+    // old code leaked it; it must now be released. The live WASM fallback must NOT be released.
+    expect(webgpu.released).toBe(true);
+    expect(wasm?.released).toBe(false);
+  }, 15000);
+
+  it('releases the WebGPU session when its probe rejects (not just on timeout)', async () => {
+    sessionBehavior.created = [];
+    const engine = await freshEngine();
+    // Make the WebGPU probe's run() reject immediately (distinct from create() failing).
+    const ort = await import('onnxruntime-web');
+    const baseCreate = ort.InferenceSession.create.getMockImplementation();
+    ort.InferenceSession.create.mockImplementation(async (bytes, opts) => {
+      const s = await baseCreate(bytes, opts);
+      if (opts.executionProviders[0] === 'webgpu') {
+        s.run = async () => {
+          throw new Error('webgpu probe rejected');
+        };
+      }
+      return s;
+    });
+
+    const status = await engine.loadSession(MANIFEST, pickVariant);
+    expect(status.ep).toBe('wasm');
+    const webgpu = sessionBehavior.created.find((s) => s.opts.executionProviders[0] === 'webgpu');
+    expect(webgpu?.released).toBe(true);
+  });
 
   it('throws when no EP is usable', async () => {
     sessionBehavior.failOn = new Set(['webgpu', 'wasm']);

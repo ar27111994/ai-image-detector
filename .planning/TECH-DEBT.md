@@ -38,7 +38,16 @@ bugs. Each notes why it's deferred and the trigger to revisit.
 - `clamp01` duplication, dead `aiProbability`, scattered timeout/byte magic numbers → centralized.
 - `getModelBlob` unbounded IDB call → time-bounded.
 - No CodeQL / release tag validation / artifact checksums → added.
-- Five UI/content modules had zero unit tests → now covered; the suite grew to 427 tests with
-  coverage spanning all of src/ at 98.5% lines / 91.3% branches / 98.0% functions (90% gate).
+- Five UI/content modules had zero unit tests → now covered; the suite grew to 430 tests with
+  coverage spanning all of src/ at 98.6% lines / 91.5% branches / 98.0% functions (90% gate).
 - Service-worker crash-recovery now resets stale session state; the README accuracy badge renders
   on all markdown renderers; docs:check tolerates sub-0.1 coverage jitter (debounce timing).
+- Concurrent model downloads raced (a timed-out onboarding retry started a second ~311MB
+  acquisition and raced state writes) → `startModelDownload` now shares one in-flight
+  `ensureModel` promise (mirrors the existing session/offscreen dedup guards).
+- Failed WebGPU sessions leaked (a created session whose probe rejected/timed out was never
+  released before WASM fallback) → now `.release()`d in `createSessionForEp` before rethrow.
+- CodeQL scan on PR #1: 4 alerts were verified false positives (SHA-256-pinned model download in
+  `pack.mjs`/`bench/model-loader.mjs` — URL is a manifest pin, bytes verified before write) and
+  dismissed with reason; 2 were real and fixed (dead store in the PNG iTXt parser; stat-then-read
+  TOCTOU in `pack.mjs`).

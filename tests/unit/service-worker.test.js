@@ -318,6 +318,31 @@ describe('service-worker router', () => {
     expect(ensureModel).toHaveBeenCalled();
   });
 
+  it('concurrent MODEL_DOWNLOAD_START calls share one in-flight ensureModel', async () => {
+    const { ensureModel } = await import('../../src/background/model-manager.js');
+    // Hold the download open so both dispatches overlap (a timed-out onboarding retry while the
+    // first download is still running must not start a second 311MB acquisition).
+    let release;
+    ensureModel.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = () => resolve({ key: 'primary-int8', bytes: 311000000, verified: true });
+        }),
+    );
+    ensureModel.mockClear();
+
+    const p1 = dispatch(req(MSG.MODEL_DOWNLOAD_START), pageSender);
+    const p2 = dispatch(req(MSG.MODEL_DOWNLOAD_START), pageSender);
+    release();
+    const [r1, r2] = await Promise.all([p1, p2]);
+
+    expect(r1.ok).toBe(true);
+    expect(r2.ok).toBe(true);
+    // One shared operation: both callers resolve with the same result, ensureModel ran once.
+    expect(ensureModel).toHaveBeenCalledTimes(1);
+    expect(r1.result).toEqual(r2.result);
+  });
+
   it('MODEL_DOWNLOAD_STATUS returns the model state', async () => {
     const res = await dispatch(req(MSG.MODEL_DOWNLOAD_STATUS), pageSender);
     expect(res.ok).toBe(true);

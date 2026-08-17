@@ -24,6 +24,7 @@ import { isSiteEnabled, loadSettings, setSiteEnabled } from '../shared/settings.
 
 let creatingOffscreen = null;
 let initializingSession = null;
+let downloadingModel = null; // in-flight ensureModel promise (dedup concurrent download starts)
 const analysisCache = new LruCache(ANALYSIS_CACHE_MAX_ENTRIES);
 const inflightAnalysis = new Map(); // contentHash -> Promise<result> (dedup concurrent identical work)
 let cachedManifest = null;
@@ -393,8 +394,18 @@ async function setSiteEnabledFor(sender, payload) {
 }
 
 async function startModelDownload() {
-  // ensureModel prefers a bundled copy (zero download) and falls back to a verified download.
-  return await modelManager.ensureModel('wasm'); // safe default; EP re-selected at inference
+  // Dedup concurrent starts: a timed-out onboarding request does NOT cancel the underlying
+  // download (sendRequest's timeout only detaches the caller), so a retry would otherwise fire a
+  // second ensureModel that passes the not-yet-ready check and downloads + hashes the ~311MB
+  // model twice, racing setModelState into out-of-order downloading/error/ready writes. Sharing
+  // the in-flight promise makes every caller wait for the same operation.
+  if (downloadingModel) return await downloadingModel;
+  downloadingModel = modelManager.ensureModel('wasm'); // safe default; EP re-selected at inference
+  try {
+    return await downloadingModel;
+  } finally {
+    downloadingModel = null;
+  }
 }
 
 async function resetModel() {
