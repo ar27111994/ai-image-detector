@@ -16,7 +16,14 @@ import {
   STORAGE_KEYS,
   TIMEOUTS,
 } from '../shared/constants.js';
-import { isRequest, makeError, makeOk, nextId, sendRequest } from '../shared/protocol.js';
+import {
+  isRequest,
+  makeError,
+  makeOk,
+  nextId,
+  sendRequest,
+  withTimeout,
+} from '../shared/protocol.js';
 import { imageContentKey } from '../shared/hash.js';
 import { LruCache } from '../shared/lru-cache.js';
 import * as modelManager from './model-manager.js';
@@ -399,8 +406,17 @@ async function startModelDownload() {
   // second ensureModel that passes the not-yet-ready check and downloads + hashes the ~311MB
   // model twice, racing setModelState into out-of-order downloading/error/ready writes. Sharing
   // the in-flight promise makes every caller wait for the same operation.
+  //
+  // The dedup entry is ABANDONABLE, not permanent: the underlying download can stall forever
+  // (fetch/reader.read() carry no abort signal here), so we race it against a deadline. On
+  // timeout the promise rejects and the finally clears the entry, so the next start begins a
+  // fresh download instead of awaiting the stuck one until the service worker restarts.
   if (downloadingModel) return await downloadingModel;
-  downloadingModel = modelManager.ensureModel('wasm'); // safe default; EP re-selected at inference
+  downloadingModel = withTimeout(
+    modelManager.ensureModel('wasm'), // safe default; EP re-selected at inference
+    TIMEOUTS.MODEL_DOWNLOAD_MS,
+    'model download',
+  );
   try {
     return await downloadingModel;
   } finally {

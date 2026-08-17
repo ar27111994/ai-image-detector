@@ -6,7 +6,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { installChromeStub } from '../helpers/dom-stub.js';
-import { MSG } from '../../src/shared/constants.js';
+import { MSG, TIMEOUTS } from '../../src/shared/constants.js';
 
 // Model manager: report ready, no real IndexedDB/network.
 vi.mock('../../src/background/model-manager.js', () => ({
@@ -341,6 +341,33 @@ describe('service-worker router', () => {
     // One shared operation: both callers resolve with the same result, ensureModel ran once.
     expect(ensureModel).toHaveBeenCalledTimes(1);
     expect(r1.result).toEqual(r2.result);
+  });
+
+  it('a stalled download times out and a retry starts a fresh ensureModel', async () => {
+    const { ensureModel } = await import('../../src/background/model-manager.js');
+    vi.useFakeTimers();
+    try {
+      // First download never settles (a stalled fetch stream) — the SW operation hangs.
+      ensureModel.mockImplementationOnce(() => new Promise(() => {}));
+      ensureModel.mockClear();
+
+      const p1 = dispatch(req(MSG.MODEL_DOWNLOAD_START), pageSender);
+      // Let the handler register the in-flight (timed) promise, then fire the deadline.
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(TIMEOUTS.MODEL_DOWNLOAD_MS + 1);
+      const r1 = await p1;
+      expect(r1.ok).toBe(false);
+      expect(r1.error.code).toBe('TIMEOUT');
+
+      // Retry: must NOT await the stuck promise — it clears and starts a replacement download.
+      vi.useRealTimers();
+      ensureModel.mockImplementation(async () => ({ alreadyReady: true }));
+      const r2 = await dispatch(req(MSG.MODEL_DOWNLOAD_START), pageSender);
+      expect(r2.ok).toBe(true);
+      expect(ensureModel).toHaveBeenCalledTimes(2); // stalled + replacement
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('MODEL_DOWNLOAD_STATUS returns the model state', async () => {

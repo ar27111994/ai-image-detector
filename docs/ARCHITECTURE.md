@@ -65,7 +65,10 @@ semantics. At first-run onboarding the SW downloads the variant, verifies SHA-25
 bytes in IndexedDB. Thereafter the extension is fully offline; weights are never re-downloaded
 (the bounty rule). Reproducible conversion is in `tools/` (see docs/MODEL.md). Concurrent
 download starts share a single in-flight `ensureModel` promise, so a retry after a timed-out
-onboarding request waits for the same operation instead of fetching and hashing twice.
+onboarding request waits for the same operation instead of fetching and hashing twice. The shared
+entry is abandonable: it is raced against `TIMEOUTS.MODEL_DOWNLOAD_MS`, so a stalled download
+rejects and clears, letting a later retry start a fresh download rather than block until the
+service worker restarts.
 
 ## Robustness techniques
 
