@@ -636,4 +636,69 @@ describe('service-worker router', () => {
     await import('../../src/background/service-worker.js');
     expect(() => startupHandler()).not.toThrow();
   });
+
+  it('survives a 50-image concurrent stampede with no lost results or duplicate inferences', async () => {
+    // 50 unique images analyzed concurrently. Each unique content must infer exactly once
+    // (dedup by content hash), and every caller must get a result (none dropped).
+    const N = 50;
+    let inferCount = 0;
+    chromeStub.chrome.runtime.sendMessage = async (msg) => {
+      if (msg.type === MSG.OFFSCREEN_ENSURE_READY) {
+        return { id: msg.id, ok: true, result: { ep: 'wasm', variant: 'primary-int8' } };
+      }
+      if (msg.type === MSG.OFFSCREEN_ANALYZE) {
+        inferCount++;
+        await new Promise((r) => setTimeout(r, 2)); // small async latency
+        return {
+          id: msg.id,
+          ok: true,
+          result: { score: 0.9, verdict: 'ai', reasons: [], ep: 'wasm', latencyMs: 1 },
+        };
+      }
+      return { id: msg.id, ok: true, result: {} };
+    };
+    const results = await Promise.all(
+      Array.from({ length: N }, () =>
+        dispatch(
+          req(MSG.ANALYZE_IMAGE_BYTES, {
+            bytes: { data: Array.from(new Uint8Array(fakeImageBytes())) },
+          }),
+          pageSender,
+        ),
+      ),
+    );
+    expect(results.every((r) => r.ok)).toBe(true);
+    expect(inferCount).toBe(N); // unique content -> one inference each (no false dedup)
+    const stats = await dispatch(req(MSG.GET_TAB_STATS, { tabId: 1 }), pageSender);
+    expect(stats.result.analyzed).toBe(N);
+  });
+
+  it('collapses a same-image burst into a single inference (stampede protection)', async () => {
+    // The SAME image requested 50 times concurrently must infer ONCE (cache-stampede guard).
+    const fixed = fakeImageBytes();
+    const mk = () => ({ data: Array.from(new Uint8Array(fixed)) });
+    let inferCount = 0;
+    chromeStub.chrome.runtime.sendMessage = async (msg) => {
+      if (msg.type === MSG.OFFSCREEN_ENSURE_READY) {
+        return { id: msg.id, ok: true, result: { ep: 'wasm', variant: 'primary-int8' } };
+      }
+      if (msg.type === MSG.OFFSCREEN_ANALYZE) {
+        inferCount++;
+        await new Promise((r) => setTimeout(r, 5));
+        return {
+          id: msg.id,
+          ok: true,
+          result: { score: 0.9, verdict: 'ai', reasons: [], ep: 'wasm', latencyMs: 1 },
+        };
+      }
+      return { id: msg.id, ok: true, result: {} };
+    };
+    const results = await Promise.all(
+      Array.from({ length: 50 }, () =>
+        dispatch(req(MSG.ANALYZE_IMAGE_BYTES, { bytes: mk() }), pageSender),
+      ),
+    );
+    expect(results.every((r) => r.ok)).toBe(true);
+    expect(inferCount).toBe(1); // 50 concurrent identical -> 1 inference
+  });
 });

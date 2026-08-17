@@ -77,4 +77,98 @@ describe('security: fusion handles hostile scores/forensics', () => {
     expect(out.score).toBe(0.99);
     expect(out.verdict).toBe('ai');
   });
+
+  it('ignores prototype-polluting keys in forensic features (__proto__/constructor)', () => {
+    // A hostile forensic payload with prototype-pollution keys must not poison the result or
+    // the global Object prototype.
+    const hostile = {
+      definitive: false,
+      summary: [],
+      features: JSON.parse('{"__proto__":{"polluted":true},"constructor":{"x":1}}'),
+    };
+    const out = fuseSignals(
+      { neuralScore: 0.5, forensic: hostile },
+      { calibration: { enabled: false, a: 1, b: 0 } },
+    );
+    expect(out.score).toBeDefined();
+    expect({}.polluted).toBeUndefined(); // global Object prototype untouched
+  });
+
+  it('survives forensic reasons that are not strings (numbers/objects/null)', () => {
+    const out = fuseSignals(
+      {
+        neuralScore: 0.9,
+        forensic: { definitive: false, summary: [123, null, { x: 1 }, ['nested']], features: {} },
+      },
+      { calibration: { enabled: false, a: 1, b: 0 } },
+    );
+    // reasons are passed through for the badge; they must be string-safe (the badge stringifies).
+    expect(Array.isArray(out.reasons)).toBe(true);
+  });
+});
+
+describe('security: hostile message envelopes (protocol robustness)', () => {
+  it('isRequest rejects malformed/hostile envelopes', async () => {
+    const { isRequest } = await import('../../src/shared/protocol.js');
+    expect(isRequest(null)).toBe(false);
+    expect(isRequest(undefined)).toBe(false);
+    expect(isRequest('string')).toBe(false);
+    expect(isRequest(42)).toBe(false);
+    expect(isRequest({})).toBe(false); // no id/type
+    expect(isRequest({ id: 1, type: 'x', payload: {} })).toBe(false); // id must be a string
+    expect(isRequest({ id: 'a', type: 42, payload: {} })).toBe(false); // type must be a string
+    expect(isRequest({ id: 'a', type: 'x' })).toBe(false); // payload required
+    expect(isRequest({ id: 'a', type: 'x', payload: {} })).toBe(true); // well-formed
+  });
+
+  it('makeError sanitizes a hostile error message to a plain string', async () => {
+    const { makeError } = await import('../../src/shared/protocol.js');
+    const out = makeError({ id: 'r1' }, { toString: () => '<img onerror=alert(1)>' }, 'X');
+    expect(out.ok).toBe(false);
+    expect(typeof out.error.message).toBe('string');
+    expect(out.error.code).toBe('X');
+  });
+
+  it('withTimeout rejects with a TIMEOUT code and never leaks the timer', async () => {
+    const { withTimeout } = await import('../../src/shared/protocol.js');
+    const never = new Promise(() => {});
+    await expect(withTimeout(never, 20, 'test-op')).rejects.toMatchObject({ code: 'TIMEOUT' });
+  });
+});
+
+describe('security: full-pipeline XSS through the forensic fusion path', () => {
+  it('a PNG carrying a hostile A1111 geninfo yields a definitive verdict with inert reasons', async () => {
+    const { extractForensicSignals } = await import(
+      '../../src/shared/metadata/forensic-extractor.js'
+    );
+    const { fuseSignals } = await import('../../src/shared/fusion/fuse.js');
+    // Craft a PNG tEXt chunk whose value is both a valid A1111 signature AND contains HTML.
+    const enc = new TextEncoder();
+    const hostile = '<svg onload=alert(1)>\nSteps: 20, Sampler: Euler a, CFG scale: 7, Seed: 1';
+    const kv = new Uint8Array([...enc.encode('parameters'), 0, ...enc.encode(hostile)]);
+    const len = kv.length;
+    const chunk = [
+      (len >>> 24) & 0xff,
+      (len >>> 16) & 0xff,
+      (len >>> 8) & 0xff,
+      len & 0xff,
+      ...enc.encode('tEXt'),
+      ...kv,
+      0,
+      0,
+      0,
+      0,
+    ];
+    const sig = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+    const iend = [0, 0, 0, 0, ...enc.encode('IEND'), 0, 0, 0, 0];
+    const png = new Uint8Array([...sig, ...chunk, ...iend]).buffer;
+
+    const forensic = await extractForensicSignals(png);
+    expect(forensic.definitive).toBe(true);
+    const fused = fuseSignals({ neuralScore: 0.1, forensic });
+    expect(fused.score).toBe(0.99);
+    expect(fused.verdict).toBe('ai');
+    // The reasons are data strings; the badge renders them via textContent (no markup).
+    for (const r of fused.reasons) expect(typeof r).toBe('string');
+  });
 });

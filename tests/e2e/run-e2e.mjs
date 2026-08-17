@@ -135,6 +135,33 @@ async function main() {
       assert.deepEqual(errors, [], `options page errors: ${errors.join('; ')}`);
       await page.close();
     });
+
+    // Full-stack badge assertion: the model is absent in CI, so the SW returns
+    // MODEL_NOT_READY and the content script renders an error/N-A badge. This asserts the
+    // badge OVERLAY actually mounts in the page DOM (the unit tests cover the badge markup;
+    // this covers the end-to-end mount path in a real page).
+    await test('analyzed image gets an in-page badge overlay (shadow-DOM host in the DOM)', async () => {
+      const page = await browser.newPage();
+      const errors = [];
+      page.on('pageerror', (e) => errors.push(e.message));
+      await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: 'networkidle0' });
+      await waitForServiceWorker(browser).catch(() => null);
+      // Wait for the badge host to mount (any verdict — N/A pre-setup is fine).
+      const badgeMounted = await waitFor(
+        () => page.evaluate(() => !!document.querySelector('[data-ai-detector-badge]')),
+        { timeoutMs: 10000, intervalMs: 300 },
+      ).catch(() => false);
+      assert.ok(badgeMounted, 'no [data-ai-detector-badge] host mounted on the analyzed image');
+      // The host carries an accessible shadow-DOM button.
+      const hasAccessibleBadge = await page.evaluate(() => {
+        const host = document.querySelector('[data-ai-detector-badge]');
+        const btn = host?.shadowRoot?.querySelector('.badge');
+        return !!btn && btn.hasAttribute('aria-label');
+      });
+      assert.ok(hasAccessibleBadge, 'badge host lacks an accessible .badge button');
+      assert.deepEqual(errors, [], `page errors: ${errors.join('; ')}`);
+      await page.close();
+    });
   } finally {
     await cleanup(ctx);
     server.close();
