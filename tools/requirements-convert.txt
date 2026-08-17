@@ -9,6 +9,6 @@ onnxslim==0.1.95
 huggingface_hub==0.34.4
 transformers==4.55.2
 numpy==2.3.2
-pillow==11.3.0
+pillow==12.3.0
 onnxconverter-common==1.16.0
 onnxscript==0.7.1
