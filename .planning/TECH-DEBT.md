@@ -24,7 +24,10 @@ bugs. Each notes why it's deferred and the trigger to revisit.
 - **TD-3 — E2E uses fixed "observe no crash" waits.** Three e2e cases sleep briefly to let
   asynchronous analysis complete and then assert the absence of page errors (a negative
   condition). They are deterministic on Chrome-for-Testing but not event-driven. **Revisit when:**
-  a badge/data-attribute readiness marker is exposed for tests to await instead.
+  a badge/data-attribute readiness marker is exposed for tests to await instead. **Partially
+  resolved:** the badge-mount path is now asserted positively (event-driven `waitFor` on
+  `[data-ai-detector-badge]` + an accessible `.badge` button); the remaining fixed waits are the
+  negative "no crash over N ms" observations, which are intentional.
 
 ## Resolved (this cycle)
 
@@ -35,4 +38,7 @@ bugs. Each notes why it's deferred and the trigger to revisit.
 - `clamp01` duplication, dead `aiProbability`, scattered timeout/byte magic numbers → centralized.
 - `getModelBlob` unbounded IDB call → time-bounded.
 - No CodeQL / release tag validation / artifact checksums → added.
-- Five UI/content modules had zero unit tests → now covered (263 → 268+ tests).
+- Five UI/content modules had zero unit tests → now covered; the suite grew to 427 tests with
+  coverage spanning all of src/ at 98.5% lines / 91.3% branches / 98.0% functions (90% gate).
+- Service-worker crash-recovery now resets stale session state; the README accuracy badge renders
+  on all markdown renderers; docs:check tolerates sub-0.1 coverage jitter (debounce timing).
