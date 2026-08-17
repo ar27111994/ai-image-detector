@@ -600,4 +600,40 @@ describe('service-worker router', () => {
     expect(res.ok).toBe(false);
     expect(res.error.code).toBe('BAD_INPUT');
   });
+
+  it('GET_STATUS reports model state + readiness + cache size', async () => {
+    const res = await dispatch(req(MSG.GET_STATUS), pageSender);
+    expect(res.ok).toBe(true);
+    expect(res.result.ready).toBe(true);
+    expect(res.result.model.status).toBe('ready');
+    expect(typeof res.result.cacheSize).toBe('number');
+  });
+
+  it('surfaces an offscreen ANALYZE error (not-ok response) as an error envelope', async () => {
+    chromeStub.chrome.runtime.sendMessage = async (msg) => {
+      if (msg.type === MSG.OFFSCREEN_ENSURE_READY) {
+        return { id: msg.id, ok: true, result: { ep: 'wasm', variant: 'primary-int8' } };
+      }
+      if (msg.type === MSG.OFFSCREEN_ANALYZE) {
+        return { id: msg.id, ok: false, error: { message: 'inference blew up', code: 'INFER' } };
+      }
+      return { id: msg.id, ok: true, result: {} };
+    };
+    const res = await dispatch(
+      req(MSG.ANALYZE_IMAGE_BYTES, {
+        bytes: { data: Array.from(new Uint8Array(fakeImageBytes())) },
+      }),
+      pageSender,
+    );
+    expect(res.ok).toBe(false);
+    expect(res.error.message).toMatch(/inference blew up/);
+  });
+
+  it('handles the browser-startup hook without throwing', async () => {
+    let startupHandler;
+    chromeStub.chrome.runtime.onStartup = { addListener: (fn) => (startupHandler = fn) };
+    vi.resetModules();
+    await import('../../src/background/service-worker.js');
+    expect(() => startupHandler()).not.toThrow();
+  });
 });

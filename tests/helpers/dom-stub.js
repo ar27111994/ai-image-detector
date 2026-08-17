@@ -195,13 +195,21 @@ export function installDomStub() {
     return globalThis.__confirmReturn ?? true;
   };
   globalThis.__confirmCalls = confirmCalls;
+  // ResizeObserver records instances so tests can fire the callback (reposition/teardown paths).
+  const roInstances = [];
+  globalThis.__roInstances = roInstances;
   globalThis.ResizeObserver = class {
     constructor(cb) {
       this.cb = cb;
+      roInstances.push(this);
     }
     observe() {}
     unobserve() {}
     disconnect() {}
+    /** Test helper: fire the observer callback. */
+    trigger() {
+      this.cb?.();
+    }
   };
   globalThis.IntersectionObserver = class {
     constructor(cb) {

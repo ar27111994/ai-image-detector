@@ -89,4 +89,68 @@ describe('model-store', () => {
     await store.clearModelStore();
     expect(await store.listModelKeys()).toEqual([]);
   });
+
+  it('overwrites an existing key (put is idempotent)', async () => {
+    await store.putModelBlob('k', new Blob(['first']));
+    const second = new Blob(['second-value']);
+    await store.putModelBlob('k', second);
+    expect(await store.getModelBlob('k')).toBe(second);
+  });
+
+  it('rejects when the database open is blocked (onblocked)', async () => {
+    // Swap in an open() that reports "blocked" — a second tab holding the DB.
+    const real = globalThis.indexedDB;
+    globalThis.indexedDB = {
+      open: vi.fn(() => {
+        const req = { onsuccess: null, onupgradeneeded: null, onerror: null, onblocked: null };
+        setTimeout(() => req.onblocked?.(), 0);
+        return req;
+      }),
+    };
+    try {
+      await expect(store.listModelKeys()).rejects.toThrow(/blocked/i);
+    } finally {
+      globalThis.indexedDB = real;
+    }
+  });
+
+  it('rejects when the database open errors (onerror)', async () => {
+    const real = globalThis.indexedDB;
+    globalThis.indexedDB = {
+      open: vi.fn(() => {
+        const req = {
+          onsuccess: null,
+          onupgradeneeded: null,
+          onerror: null,
+          onblocked: null,
+          error: new Error('quota'),
+        };
+        setTimeout(() => req.onerror?.(), 0);
+        return req;
+      }),
+    };
+    try {
+      await expect(store.listModelKeys()).rejects.toThrow(/quota/i);
+    } finally {
+      globalThis.indexedDB = real;
+    }
+  });
+
+  it('times out a hung IndexedDB open (withTimeout bound)', async () => {
+    // open() that never resolves — the withTimeout wrapper must reject.
+    const real = globalThis.indexedDB;
+    globalThis.indexedDB = {
+      open: vi.fn(() => ({
+        onsuccess: null,
+        onupgradeneeded: null,
+        onerror: null,
+        onblocked: null,
+      })),
+    };
+    try {
+      await expect(store.listModelKeys()).rejects.toThrow(/timed out|indexedDB/i);
+    } finally {
+      globalThis.indexedDB = real;
+    }
+  }, 20000);
 });

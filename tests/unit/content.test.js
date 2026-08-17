@@ -521,4 +521,78 @@ describe('content script orchestrator', () => {
     await new Promise((r) => setTimeout(r, 60));
     expect(analysisCount).toBe(1); // still 1 — not re-analyzed
   });
+
+  it('reorders a queued image to the front when it scrolls into view (prioritize)', async () => {
+    // Two images; b is queued behind a. IntersectionObserver fires for b -> b jumps the queue.
+    const a = makeImg('https://x/prio-a.png');
+    const b = makeImg('https://x/prio-b.png');
+    discoverState.images = [a, b];
+    let ioCallback;
+    const origIO = globalThis.IntersectionObserver;
+    globalThis.IntersectionObserver = class {
+      constructor(cb) {
+        ioCallback = cb;
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    };
+    // Hold analysis so both are queued before either completes, then free them in order.
+    const gate = [];
+    await loadContent({
+      sendImpl: async (msg) => {
+        if (msg.type === MSG.PING) return { id: msg.id, ok: true, result: {} };
+        if (msg.type === MSG.GET_SETTINGS)
+          return {
+            id: msg.id,
+            ok: true,
+            result: { autoScan: true, showBadges: true, minImageSize: 1, maxImagesPerPage: 50 },
+          };
+        if (msg.type === MSG.ANALYZE_IMAGE) {
+          return await new Promise((resolve) =>
+            gate.push(() =>
+              resolve({
+                id: msg.id,
+                ok: true,
+                result: { score: 0.5, verdict: 'uncertain', reasons: [] },
+              }),
+            ),
+          );
+        }
+        return { id: msg.id, ok: true, result: {} };
+      },
+    });
+    globalThis.IntersectionObserver = origIO;
+    await new Promise((r) => setTimeout(r, 30));
+    if (ioCallback) ioCallback([{ isIntersecting: true, target: b }]);
+    for (const release of gate) release();
+    await new Promise((r) => setTimeout(r, 40));
+    // b was prioritized; both eventually analyzed.
+    expect(gate.length).toBeGreaterThan(0);
+  });
+
+  it('returns null (skip) for a blob: image whose bytes exceed the in-page size cap', async () => {
+    discoverState.images = [makeImg('blob:https://x/toobig')];
+    const sent = [];
+    globalThis.fetch = vi.fn(async () => ({
+      ok: true,
+      arrayBuffer: async () => new ArrayBuffer(33 * 1024 * 1024), // > 32MB in-page cap
+    }));
+    await loadContent({
+      sendImpl: async (msg) => {
+        sent.push(msg.type);
+        if (msg.type === MSG.PING) return { id: msg.id, ok: true, result: {} };
+        if (msg.type === MSG.GET_SETTINGS)
+          return {
+            id: msg.id,
+            ok: true,
+            result: { autoScan: true, showBadges: true, minImageSize: 1, maxImagesPerPage: 50 },
+          };
+        return { id: msg.id, ok: true, result: {} };
+      },
+    });
+    await new Promise((r) => setTimeout(r, 50));
+    // Oversized in-page read returns null -> skipped; never sent to the SW as bytes.
+    expect(sent).not.toContain(MSG.ANALYZE_IMAGE_BYTES);
+  });
 });

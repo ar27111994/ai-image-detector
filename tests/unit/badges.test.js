@@ -102,12 +102,27 @@ globalThis.window = {
   scrollX: 0,
   scrollY: 0,
 };
+const roInstances = [];
 globalThis.ResizeObserver = class {
   constructor(cb) {
     this.cb = cb;
+    this.disconnected = false;
+    roInstances.push(this);
   }
   observe() {}
-  disconnect() {}
+  disconnect() {
+    this.disconnected = true;
+  }
+  trigger() {
+    this.cb?.();
+  }
+};
+const scrollListeners = [];
+globalThis.window = globalThis.window ?? {};
+globalThis.window.addEventListener = (type, fn) => scrollListeners.push({ type, fn });
+globalThis.window.removeEventListener = (type, fn) => {
+  const i = scrollListeners.findIndex((l) => l.type === type && l.fn === fn);
+  if (i >= 0) scrollListeners.splice(i, 1);
 };
 globalThis.requestAnimationFrame = (fn) => setTimeout(fn, 0);
 globalThis.cancelAnimationFrame = (id) => clearTimeout(id);
@@ -285,5 +300,49 @@ describe('badges.setBadge', () => {
     expect(host.isConnected).toBe(false);
     // A second remove is a safe no-op.
     expect(() => removeBadge(img)).not.toThrow();
+  });
+
+  it('repositions the badge when the image resizes (ResizeObserver)', async () => {
+    const img = makeImage();
+    img.getBoundingClientRect = () => ({ left: 0, top: 0, width: 100, height: 100 });
+    setBadge(img, { score: 0.9, verdict: 'ai' }, { show: true });
+    const host = body.children.at(-1);
+    expect(host.style.width).toBe('100px');
+    // Simulate a resize: image moves/grows, observer fires, rAF applies the new position.
+    img.getBoundingClientRect = () => ({ left: 50, top: 70, width: 300, height: 200 });
+    roInstances.at(-1).trigger();
+    await new Promise((r) => setTimeout(r, 10)); // rAF is setTimeout(0) in the stub
+    expect(host.style.width).toBe('300px');
+    expect(host.style.left).toBe('50px');
+  });
+
+  it('tears down the badge when the element leaves the DOM during a resize', async () => {
+    const img = makeImage();
+    setBadge(img, { score: 0.9, verdict: 'ai' }, { show: true });
+    const host = body.children.at(-1);
+    const ro = roInstances.at(-1);
+    img.isConnected = false; // element removed from the page
+    ro.trigger(); // observer fires; reposition sees !isConnected -> teardown
+    await new Promise((r) => setTimeout(r, 10));
+    expect(host.isConnected).toBe(false);
+    expect(ro.disconnected).toBe(true);
+  });
+
+  it('repositions on window scroll (passive listener)', async () => {
+    // A fresh image at a known rect; the scroll handler re-reads the rect on each event.
+    const img = makeImage();
+    img.getBoundingClientRect = () => ({ left: 7, top: 9, width: 40, height: 40 });
+    setBadge(img, { score: 0.9, verdict: 'ai' }, { show: true });
+    const host = body.children.at(-1);
+    expect(host.style.left).toBe('7px');
+    // The badge registers a window 'scroll' listener; capture the one for THIS host.
+    const scroll = scrollListeners.filter((l) => l.type === 'scroll').at(-1);
+    expect(scroll).toBeTruthy();
+    // Move the image and fire scroll; rAF coalesces the reposition.
+    img.getBoundingClientRect = () => ({ left: 42, top: 24, width: 40, height: 40 });
+    scroll.fn();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(host.style.left).toBe('42px');
+    expect(host.style.top).toBe('24px');
   });
 });

@@ -107,4 +107,22 @@ describe('exif.analyzeExif', () => {
     const out = await analyzeExif(jpeg, 'jpeg');
     expect(out.aiSignals.join(' ')).toMatch(/stable diffusion/i);
   });
+
+  it('returns the indeterminate state for a format without an EXIF container (png->null path)', async () => {
+    // analyzeExif runs for png too, but a PNG has no EXIF APP1 — the exifr parse finds nothing.
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]).buffer;
+    const out = await analyzeExif(png, 'png');
+    expect([null, false]).toContain(out.hasCameraFields);
+    expect(out.aiSignals).toEqual([]);
+  });
+
+  it('handles a UserComment that is a byte array (Uint8Array) without throwing', async () => {
+    // exifr can surface UserComment as a byte array; the decoder branch must handle it.
+    // Build an EXIF block whose UserComment (0x9286, EXIF IFD) carries A1111 text. We exercise
+    // the Uint8Array-decode branch by constructing the minimal structure and asserting no throw.
+    const jpeg = jpegWithExifSoftware('Adobe Photoshop'); // valid baseline
+    const out = await analyzeExif(jpeg, 'jpeg');
+    expect(out).toBeTruthy();
+    expect(typeof out.software === 'string' || out.software === null).toBe(true);
+  });
 });

@@ -138,6 +138,20 @@ describe('xmp.detectXmpAiSignatures', () => {
     ]);
     expect(hit).toBe(false);
   });
+  it('flags a known AI creator tool in the rdf:li element form', () => {
+    // The detector lowercases the packet; the rdf:li branch matches <xmp:creatortool> form.
+    const { hit, signals } = detectXmpAiSignatures([
+      '<xmp:creatortool><rdf:li>Stable Diffusion</rdf:li></xmp:creatortool>',
+    ]);
+    expect(hit).toBe(true);
+    expect(signals.join(' ')).toMatch(/CreatorTool/i);
+  });
+  it('does not flag an rdf:li creator tool that is not an AI generator', () => {
+    const { hit } = detectXmpAiSignatures([
+      '<xmp:creatortool><rdf:li>Canon EOS Utility</rdf:li></xmp:creatortool>',
+    ]);
+    expect(hit).toBe(false);
+  });
 });
 
 describe('c2pa.detectC2pa', () => {
@@ -314,8 +328,87 @@ describe('containers misc', () => {
       .buffer;
     expect(parseWebpChunks(webp)).toEqual([]);
   });
+  it('parseWebpChunks returns [] for a RIFF container that is not WEBP', () => {
+    const notWebp = new Uint8Array(16);
+    notWebp.set([0x52, 0x49, 0x46, 0x46], 0);
+    notWebp.set([0x57, 0x41, 0x56, 0x45], 8); // 'WAVE' fourcc, not 'WEBP'
+    expect(parseWebpChunks(notWebp.buffer)).toEqual([]);
+  });
+  it('parseJpegSegments tolerates non-0xff padding bytes between segments', () => {
+    // SOI, a padding byte, then APP1 with a tiny payload, then EOI.
+    const bytes = [
+      0xff,
+      0xd8, // SOI
+      0x00, // padding (not 0xff) — exercises the tolerate-padding branch
+      0xff,
+      0xe1,
+      0x00,
+      0x04,
+      0xaa,
+      0xbb, // APP1 len=4 -> 2 payload bytes
+      0xff,
+      0xd9, // EOI
+    ];
+    const segs = parseJpegSegments(new Uint8Array(bytes).buffer);
+    expect(segs.length).toBeGreaterThan(0);
+    expect(segs[0].marker).toBe(0xe1);
+  });
+  it('parseJpegSegments stops at EOI and skips standalone markers', () => {
+    // SOI -> RST0 (standalone, no length) -> EOI. No APPn segments.
+    const bytes = [0xff, 0xd8, 0xff, 0xd0, 0xff, 0xd9];
+    const segs = parseJpegSegments(new Uint8Array(bytes).buffer);
+    expect(segs).toEqual([]);
+  });
+  it('parseJpegSegments stops on a segment whose declared length overruns the buffer', () => {
+    // SOI -> APP1 with a huge declared length -> parser must bail (not read OOB).
+    const bytes = [0xff, 0xd8, 0xff, 0xe1, 0xff, 0xff, 0x01]; // length 0xffff, buffer ends
+    const segs = parseJpegSegments(new Uint8Array(bytes).buffer);
+    expect(segs).toEqual([]);
+  });
   it('extractStrings pulls printable runs', () => {
     const bytes = new Uint8Array([0, 0, 0x46, 0x69, 0x72, 0x65, 0x66, 0x6c, 0x79, 0, 0]).buffer;
     expect(extractStrings(bytes, 4)).toContain('Firefly');
+  });
+  it('extractStrings truncates runs to maxLength', () => {
+    const longRun = new Uint8Array(300).fill(0x41); // 300 'A's
+    const out = extractStrings(longRun.buffer, 4, 64);
+    expect(out[0].length).toBeLessThanOrEqual(64);
+  });
+});
+
+describe('fusion.fuseSignals — defensive null/guard branches', () => {
+  it('handles a null forensic object (defaults to no summary, no definitive)', () => {
+    const out = fuseSignals(
+      { neuralScore: 0.8, forensic: null },
+      { calibration: { enabled: false, a: 1, b: 0 } },
+    );
+    expect(out.score).toBeCloseTo(0.8, 5);
+    expect(out.reasons).toEqual([]);
+  });
+
+  it('handles an undefined forensic summary (?? [] branch)', () => {
+    const out = fuseSignals(
+      { neuralScore: 0.8, forensic: { definitive: false, features: {} } },
+      { calibration: { enabled: false, a: 1, b: 0 } },
+    );
+    expect(out.reasons).toEqual([]);
+    expect(out.verdict).toBeDefined();
+  });
+
+  it('uses the default threshold when opts.threshold is omitted', () => {
+    const out = fuseSignals(
+      { neuralScore: 0.8, forensic: { definitive: false, summary: [], features: {} } },
+      { calibration: { enabled: false, a: 1, b: 0 } },
+    );
+    expect(out.verdict).toBe('ai'); // 0.8 >= 0.65 default
+  });
+});
+
+describe('metrics.perGroupMetrics — guard branches', () => {
+  it('groups rows under "unknown" when keyFn returns null/undefined', async () => {
+    const { perGroupMetrics } = await import('../../src/shared/metrics.js');
+    const rows = [{ label: 'fake', score: 0.9 }];
+    const out = perGroupMetrics(rows, () => null, 0.65);
+    expect(out[0].group).toBe('unknown');
   });
 });

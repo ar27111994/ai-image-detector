@@ -195,4 +195,28 @@ describe('options page ARIA hygiene', () => {
     await new Promise((r) => setTimeout(r, 20));
     expect(chromeStub.storage.get(STORAGE_KEYS.SETTINGS).badgePosition).toBe('bottom-right');
   });
+
+  it('persists every numeric + boolean setting field to storage', async () => {
+    await loadOptions();
+    const root = document.getElementById('options-root');
+    const all = collectAttributes(root);
+    // Exercise each numeric field (threshold, minImageSize, maxImagesPerPage).
+    for (const num of all.filter((n) => n.getAttribute('type') === 'number')) {
+      num.value = num.getAttribute('max') ?? '100';
+      num.dispatch('change');
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    // Exercise each checkbox (autoScan, showBadges, visibleOnly).
+    for (const cb of all.filter((n) => n.getAttribute('type') === 'checkbox')) {
+      cb.checked = !cb.checked;
+      cb.dispatch('change');
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    const saved = chromeStub.storage.get(STORAGE_KEYS.SETTINGS);
+    expect(saved).toBeTruthy();
+    expect(Number.isFinite(saved.minImageSize)).toBe(true);
+    expect(Number.isFinite(saved.maxImagesPerPage)).toBe(true);
+    expect(typeof saved.showBadges).toBe('boolean');
+    expect(typeof saved.visibleOnly).toBe('boolean');
+  });
 });

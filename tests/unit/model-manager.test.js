@@ -289,4 +289,41 @@ describe('model-manager.ensureModel bundled fast path', () => {
     const { isModelReady } = await import('../../src/background/model-manager.js');
     expect(await isModelReady()).toBe(false);
   });
+
+  it('loadVariantBlob returns the stored blob', async () => {
+    const { loadVariantBlob } = await import('../../src/background/model-manager.js');
+    const blob = new Blob([new Uint8Array([9, 9])]);
+    idbData.set('variant-x', blob);
+    expect(await loadVariantBlob('variant-x')).toBe(blob);
+  });
+
+  it('loadVariantBlob throws a clear error when the variant is absent', async () => {
+    const { loadVariantBlob } = await import('../../src/background/model-manager.js');
+    idbData.clear();
+    await expect(loadVariantBlob('missing-variant')).rejects.toThrow(/not found in local store/);
+  });
+
+  it('pickVariant falls back to the first variant when no EP matches', async () => {
+    const { pickVariant } = await import('../../src/background/model-manager.js');
+    const manifest = { variants: [{ kind: 'exotic', key: 'only-one' }] };
+    expect(pickVariant(manifest, 'webgpu').key).toBe('only-one');
+    expect(pickVariant(manifest, 'wasm').key).toBe('only-one');
+  });
+
+  it('pickVariant prefers the matching EP and falls back webgpu->wasm', async () => {
+    const { pickVariant } = await import('../../src/background/model-manager.js');
+    const manifest = {
+      variants: [
+        { kind: 'wasm', key: 'wasm-var' },
+        { kind: 'webgpu', key: 'webgpu-var' },
+      ],
+    };
+    expect(pickVariant(manifest, 'webgpu').key).toBe('webgpu-var');
+    expect(pickVariant(manifest, 'wasm').key).toBe('wasm-var');
+  });
+
+  it('pickVariant throws a clear error for an empty manifest', async () => {
+    const { pickVariant } = await import('../../src/background/model-manager.js');
+    expect(() => pickVariant({ variants: [] }, 'wasm')).toThrow(/no variants/);
+  });
 });
