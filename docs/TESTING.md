@@ -25,7 +25,7 @@ The enforced **90% floor** (lines/branches/functions/statements) spans **all of 
 currently
 
 <!-- AUTO:COV_LINES -->98.6<!-- /AUTO:COV_LINES --> lines /
-<!-- AUTO:COV_BRANCHES -->91.5<!-- /AUTO:COV_BRANCHES --> branches /
+<!-- AUTO:COV_BRANCHES -->91.4<!-- /AUTO:COV_BRANCHES --> branches /
 <!-- AUTO:COV_FUNCS -->98.0<!-- /AUTO:COV_FUNCS --> functions.
 
 Breakdown: the pure, platform-independent logic (`src/shared/**`, `src/background/model-manager.js`)
