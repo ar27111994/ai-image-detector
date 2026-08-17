@@ -139,6 +139,20 @@ async function latestBa(fileName) {
 
 const MARKER_RE = /<!--\s*AUTO:([A-Z0-9_]+)\s*-->([\s\S]*?)<!--\s*\/AUTO:\1\s*-->/g;
 
+// Coverage percentages (COV_LINES/COV_BRANCHES/COV_FUNCS) come from v8, whose branch attribution
+// for timing-dependent code (e.g. a debounced MutationObserver) can jitter by a tenth of a point
+// between runs. In --check mode we tolerate a <=0.1 difference so a racy branch doesn't flake CI;
+// the value is still written fresh on a real sync.
+const COVERAGE_KEYS = new Set(['COV_LINES', 'COV_BRANCHES', 'COV_FUNCS']);
+const COVERAGE_TOLERANCE = 0.1;
+
+function isEffectivelyEqual(key, oldValue, newValue, check) {
+  if (!check || !COVERAGE_KEYS.has(key)) return false;
+  const a = parseFloat(oldValue);
+  const b = parseFloat(newValue);
+  return Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) <= COVERAGE_TOLERANCE;
+}
+
 async function syncFile(file, values, { check }) {
   const full = path.join(repoRoot, file);
   let content;
@@ -155,11 +169,11 @@ async function syncFile(file, values, { check }) {
       missing.push(key);
       return match;
     }
-    if (oldValue !== value) {
-      changed = true;
-      return `<!-- AUTO:${key} -->${value}<!-- /AUTO:${key} -->`;
+    if (oldValue === value || isEffectivelyEqual(key, oldValue, value, check)) {
+      return match;
     }
-    return match;
+    changed = true;
+    return `<!-- AUTO:${key} -->${value}<!-- /AUTO:${key} -->`;
   });
   if (changed && !check) await writeFile(full, next, 'utf8');
   return { file, changed, missing };
