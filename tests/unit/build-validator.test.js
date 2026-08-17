@@ -44,17 +44,12 @@ describe('hasTopLevelEsm (content-script IIFE validator)', () => {
     expect(hasTopLevelEsm('function f(){ return 1 } export { f };')).toBe(true);
   });
 
-  it('accepts real dist content (IIFE) and rejects an ESM chunk', async () => {
-    const { readFile } = await import('node:fs/promises');
-    const path = await import('node:path');
-    const content = await readFile(path.resolve('dist/content.js'), 'utf8');
-    expect(hasTopLevelEsm(content)).toBe(false);
-    // Any chunk-*.js is the ESM-split shared module (has top-level import/export).
-    const { readdir } = await import('node:fs/promises');
-    const chunk = (await readdir('dist')).find((f) => /^chunk-.*\.js$/.test(f));
-    if (chunk) {
-      const chunkSrc = await readFile(path.resolve('dist', chunk), 'utf8');
-      expect(hasTopLevelEsm(chunkSrc)).toBe(true);
-    }
+  it('accepts a real esbuild IIFE bundle shape and rejects a real esbuild ESM chunk shape', () => {
+    // Representative of esbuild's actual output formats (not read from dist/, which is absent
+    // in CI's test job — these fixtures are self-contained).
+    const iife = '(()=>{var g=Object.freeze({A:"a"});function r(){return g.A}return r();})();';
+    expect(hasTopLevelEsm(iife)).toBe(false);
+    const esmChunk = 'import { a } from "./chunk-AAAA.js";\nconst b = a + 1;\nexport { b };\n';
+    expect(hasTopLevelEsm(esmChunk)).toBe(true);
   });
 });
