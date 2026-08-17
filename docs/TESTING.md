@@ -7,13 +7,13 @@
 | Unit        | `npm test`                                              | Pure modules (preprocessing, metrics, RNG, protocol, LRU cache, hashing, settings, math, model-variant, container/PNG/XMP/C2PA/EXIF parsers, fusion, spectral, discovery, badges, model-manager, inference score) + the runtime modules (offscreen orchestrator, service-worker router, content-script queue, popup/options/onboarding pages) + malformed-input, security, concurrency/stress |
 | Integration | `npm test` (tests/integration)                          | Service-worker message router with a mock chrome runtime: protocol round-trip, sender validation (FORBIDDEN), bad-input and site-disabled paths (event-driven response latch, no fixed sleeps)                                                                                                                                                                                                |
 | Benchmark   | `node bench/run-pipeline.mjs --model haywoodsloan-int8` | Full detection stack over the labeled public benchmark via onnxruntime-node; **exits non-zero below the 75% bar**                                                                                                                                                                                                                                                                             |
-| E2E         | `npm run test:e2e`                                      | Real extension in headless Chrome-for-Testing: SW start, content-script inject, discovery + lazy-load, SPA navigation, graceful degradation pre-setup, options-page render                                                                                                                                                                                                                    |
+| E2E         | `npm run test:e2e`                                      | Real extension in headless Chrome-for-Testing: SW start, content-script inject, discovery + lazy-load, SPA navigation, graceful degradation pre-setup, options-page render, badge-mount (shadow-DOM host + accessible button, event-driven waitFor)                                                                                                                                           |
 | Lint/format | `npm run lint` / `npm run format:check`                 | ESLint flat + Prettier (both block CI on failure)                                                                                                                                                                                                                                                                                                                                             |
 | Coverage    | `npm run cover`                                         | v8 coverage on `src/shared/**` + `src/background/model-manager.js`, 90% floor on lines/branches/functions/statements                                                                                                                                                                                                                                                                          |
 
 ## Test counts
 
-<!-- AUTO:TEST_COUNT -->427<!-- /AUTO:TEST_COUNT --> tests across <!-- AUTO:TEST_FILES -->34<!-- /AUTO:TEST_FILES --> files (unit + integration), plus 6 e2e cases in real Chrome.
+<!-- AUTO:TEST_COUNT -->427<!-- /AUTO:TEST_COUNT --> tests across <!-- AUTO:TEST_FILES -->34<!-- /AUTO:TEST_FILES --> files (unit + integration), plus 7 e2e cases in real Chrome.
 
 > Test counts, coverage %, and benchmark accuracy in the docs are auto-synced from the source of
 > truth via `npm run docs:sync` (see CONTRIBUTING.md). The `test` CI job fails if they drift
@@ -21,7 +21,7 @@
 
 ## Coverage policy
 
-The enforced **80% floor** (lines/branches/functions/statements) spans **all of `src/`** —
+The enforced **90% floor** (lines/branches/functions/statements) spans **all of `src/`** —
 currently
 
 <!-- AUTO:COV_LINES -->98.5<!-- /AUTO:COV_LINES --> lines /
@@ -34,7 +34,7 @@ content script, popup/options/onboarding pages) have dedicated unit suites built
 DOM/chrome stub (`tests/helpers/dom-stub.js`), plus the integration (mock-chrome) and e2e suites.
 The one deliberately-lower file is `src/offscreen/inference-engine.js` — its ORT session lifecycle
 (WebGPU probe, WASM fallback, live inference) genuinely requires a browser and is covered by the e2e
-suite instead, so the 80% floor keeps the gate honest without gaming it.
+suite instead, so the 90% floor keeps the gate honest without gaming it.
 
 ## CI gates
 

@@ -18,4 +18,4 @@
 - [x] Post-release audit + hardening (2026-08-16): 32 findings fixed — accuracy docs corrected to
       the shipped numbers (84.2% raw / 83.0% augmented), NOTICE added (REQ-21), CodeQL + release
       gates + checksums, WCAG/accessibility fixes, design-token expansion, DRY refactors, offscreen
-      crash recovery, and unit tests for all previously-untested modules (268 tests / 32 files).
+      crash recovery, and unit tests for all previously-untested modules (427 tests / 34 files).

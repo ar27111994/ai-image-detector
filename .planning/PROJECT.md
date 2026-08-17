@@ -68,4 +68,4 @@ on the user's device.
 ## Current Status
 
 Milestone 1 **COMPLETE** (v1.0.0 shipped) + post-release audit/hardening pass complete. See
-STATE.md for the current verified position (268 tests, e2e 6/6, 84.2%/83.0% accuracy).
+STATE.md for the current verified position (427 tests, e2e 7/7, 84.2%/83.0% accuracy).

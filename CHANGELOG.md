@@ -4,17 +4,12 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ## [Unreleased]
 
-Post-release hardening, audit, and polish (no accuracy change — same shipped pipeline).
+(Next release changes land here.)
 
-### Fixed (accuracy documentation)
+## [1.0.0] — 2026-08-16 — Milestone 1 (first qualifying submission) + post-audit hardening
 
-- **Accuracy figures corrected to the shipped numbers.** The README and some docs previously
-  showed the _uncalibrated_ raw neural score (81.5%) while claiming it was the calibrated pipeline
-  result. `tools/sync-docs.mjs` now sources the definitive shipped-calibration runs
-  (`haywoodsloan-int8__single-full-final.jsonl`, `haywoodsloan-int8__single-aug-final.jsonl`):
-  **84.2% raw** / **83.0% augmented (full 1,413-image set)** @ 0.65. The augmented figure replaces
-  a non-representative 103-image subset (83.13%) with the full-set measurement. Both numbers were
-  reproduced live by re-running the shipped pipeline (`bench/run-pipeline.mjs`).
+Post-release hardening, audit, and polish (no accuracy change — same shipped pipeline), folded
+into the v1.0.0 submission.
 
 ### Added (compliance, security, CI)
 
@@ -46,12 +41,23 @@ Post-release hardening, audit, and polish (no accuracy change — same shipped p
 
 ### Testing
 
-- **263 tests / 31 files** (was 227/24). New unit suites for the previously untested
+- **427 tests / 34 files** (was 227/24 at v1.0.0). New unit suites for the previously untested
   popup/options/onboarding pages, the offscreen orchestrator, and the service-worker router
-  (sender auth, cache, stampede dedup, site-disable). Integration dispatch harness de-flaked
-  (event-driven latch replaces fixed sleeps). Coverage gate still ≥90% (97.0/91.1/93.1 measured).
+  (sender auth, cache, stampede dedup, site-disable). Concurrency/stress suites (50-unique and
+  50-identical-image stampedes verifying exactly-once inference and cache-collapse), adversarial
+  security suites (prototype-pollution, hostile message envelopes, full-pipeline XSS through a
+  hostile A1111 PNG), and edge/corrupt-input parsers. Integration dispatch harness de-flaked
+  (event-driven latch replaces fixed sleeps). Coverage gate ≥90% (98.5/91.3/98.0 measured).
 
-## [1.0.0] — 2026-08-14 — Milestone 1 (first qualifying submission)
+### Fixed (accuracy documentation)
+
+- **Accuracy figures corrected to the shipped numbers.** The README and some docs previously
+  showed the _uncalibrated_ raw neural score (81.5%) while claiming it was the calibrated pipeline
+  result. `tools/sync-docs.mjs` now sources the definitive shipped-calibration runs
+  (`haywoodsloan-int8__single-full-final.jsonl`, `haywoodsloan-int8__single-aug-final.jsonl`):
+  **84.2% raw** / **83.0% augmented (full 1,413-image set)** @ 0.65. The augmented figure replaces
+  a non-representative 103-image subset (83.13%) with the full-set measurement. Both numbers were
+  reproduced live by re-running the shipped pipeline (`bench/run-pipeline.mjs`).
 
 ### Added
 

@@ -15,9 +15,9 @@
   design-token expansion, DRY refactors (shared math.js, model-variant.js, centralized TIMEOUTS),
   bounded IDB get, offscreen crash recovery, and unit suites for the five previously-untested
   UI/content modules. See CHANGELOG [Unreleased] and .planning/TECH-DEBT.md.
-- Verified gates: npm ci && npm run build && npm test (268 tests / 32 files) && npm run test:e2e
-  (6/6) && npm run lint && npm run format:check && npm run docs:check all pass. Coverage 97.0%
-  lines / 91.3% branches / 93.1% functions (90% gate). Docs auto-synced via tools/sync-docs.mjs.
+- Verified gates: npm ci && npm run build && npm test (427 tests / 34 files) && npm run test:e2e
+  (7/7) && npm run lint && npm run format:check && npm run docs:check all pass. Coverage 98.5%
+  lines / 91.3% branches / 98.0% functions (90% gate). Docs auto-synced via tools/sync-docs.mjs.
 - Git hooks: pre-commit (lint-staged + docs:check), pre-push (full tests + e2e).
 - Next (manual, owner): submit claim on poidh.xyz bounty #323 linking the repo.
 
