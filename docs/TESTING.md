@@ -13,7 +13,7 @@
 
 ## Test counts
 
-<!-- AUTO:TEST_COUNT -->279<!-- /AUTO:TEST_COUNT --> tests across <!-- AUTO:TEST_FILES -->33<!-- /AUTO:TEST_FILES --> files (unit + integration), plus 6 e2e cases in real Chrome.
+<!-- AUTO:TEST_COUNT -->388<!-- /AUTO:TEST_COUNT --> tests across <!-- AUTO:TEST_FILES -->34<!-- /AUTO:TEST_FILES --> files (unit + integration), plus 6 e2e cases in real Chrome.
 
 > Test counts, coverage %, and benchmark accuracy in the docs are auto-synced from the source of
 > truth via `npm run docs:sync` (see CONTRIBUTING.md). The `test` CI job fails if they drift
@@ -24,9 +24,9 @@
 The enforced **80% floor** (lines/branches/functions/statements) spans **all of `src/`** —
 currently
 
-<!-- AUTO:COV_LINES -->87.1<!-- /AUTO:COV_LINES --> lines /
-<!-- AUTO:COV_BRANCHES -->83.1<!-- /AUTO:COV_BRANCHES --> branches /
-<!-- AUTO:COV_FUNCS -->84.7<!-- /AUTO:COV_FUNCS --> functions.
+<!-- AUTO:COV_LINES -->97.2<!-- /AUTO:COV_LINES --> lines /
+<!-- AUTO:COV_BRANCHES -->90.3<!-- /AUTO:COV_BRANCHES --> branches /
+<!-- AUTO:COV_FUNCS -->94.9<!-- /AUTO:COV_FUNCS --> functions.
 
 Breakdown: the pure, platform-independent logic (`src/shared/**`, `src/background/model-manager.js`)
 sits at 90–100% per file. The runtime/UI modules (service-worker router, offscreen orchestrator,

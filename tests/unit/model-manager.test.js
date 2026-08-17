@@ -46,6 +46,11 @@ globalThis.indexedDB = {
               setTimeout(() => r.onsuccess?.(), 0);
               return r;
             },
+            getAllKeys: () => {
+              const r = { result: [...idbData.keys()], onsuccess: null, onerror: null };
+              setTimeout(() => r.onsuccess?.(), 0);
+              return r;
+            },
           }),
         });
       },
@@ -255,5 +260,33 @@ describe('model-manager.ensureModel bundled fast path', () => {
     const res = await ensureModel('wasm');
     expect(res.bundled).toBe(true);
     expect(res.verified).toBe(true);
+  });
+
+  it('short-circuits when the model is already ready (no fetch, no download)', async () => {
+    const { ensureModel } = await import('../../src/background/model-manager.js');
+    // isModelReady() true: state ready + variant blob present in the store.
+    store.set('model.state.v1', { status: 'ready', variant: 'primary-int8' });
+    idbData.set('primary-int8', new Blob([new Uint8Array([1])]));
+    let fetchCalled = false;
+    fetchImpl = async () => {
+      fetchCalled = true;
+      return { ok: false, status: 404 };
+    };
+    const res = await ensureModel('wasm');
+    expect(res.alreadyReady).toBe(true);
+    expect(fetchCalled).toBe(false);
+  });
+
+  it('isModelReady returns false when state is not ready', async () => {
+    store.set('model.state.v1', { status: 'missing', variant: null });
+    const { isModelReady } = await import('../../src/background/model-manager.js');
+    expect(await isModelReady()).toBe(false);
+  });
+
+  it('isModelReady returns false when the variant blob is absent from the store', async () => {
+    store.set('model.state.v1', { status: 'ready', variant: 'not-stored' });
+    idbData.clear();
+    const { isModelReady } = await import('../../src/background/model-manager.js');
+    expect(await isModelReady()).toBe(false);
   });
 });

@@ -16,6 +16,11 @@ vi.mock('../../src/background/model-manager.js', () => ({
   ensureModel: vi.fn(async () => ({ alreadyReady: true })),
 }));
 
+// Model store: the SW's resetModel() imports it dynamically to clear the store.
+vi.mock('../../src/shared/model-store.js', () => ({
+  clearModelStore: vi.fn(async () => {}),
+}));
+
 let chromeStub;
 let listener;
 let offscreenCalls;
@@ -233,5 +238,366 @@ describe('service-worker router', () => {
     expect(ensureAttempts).toBe(2);
     // A fresh manifest must be loaded for the retry (initial + re-load after recovery).
     expect(loadManifest.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('rejects an oversized image by content-length before reading the body', async () => {
+    globalThis.fetch = vi.fn(async () => ({
+      ok: true,
+      headers: { get: () => String(64 * 1024 * 1024) }, // 64MB > 32MB cap
+      blob: async () => ({ size: 64 * 1024 * 1024, arrayBuffer: async () => new ArrayBuffer(8) }),
+    }));
+    const res = await dispatch(
+      req(MSG.ANALYZE_IMAGE, { url: 'https://cdn.example/huge.png' }),
+      pageSender,
+    );
+    expect(res.ok).toBe(false);
+    expect(res.error.message).toMatch(/too large/);
+    expect(offscreenCalls).toBe(0);
+  });
+
+  it('rejects an oversized image by actual blob size (no content-length)', async () => {
+    globalThis.fetch = vi.fn(async () => ({
+      ok: true,
+      headers: { get: () => null },
+      blob: async () => ({ size: 64 * 1024 * 1024, arrayBuffer: async () => new ArrayBuffer(8) }),
+    }));
+    const res = await dispatch(
+      req(MSG.ANALYZE_IMAGE, { url: 'https://cdn.example/huge2.png' }),
+      pageSender,
+    );
+    expect(res.ok).toBe(false);
+    expect(res.error.message).toMatch(/too large/);
+  });
+
+  it('skips data:/blob: URLs on the by-url path (bytes required instead)', async () => {
+    const res = await dispatch(
+      req(MSG.ANALYZE_IMAGE, { url: 'data:image/png;base64,AAAA' }),
+      pageSender,
+    );
+    expect(res.ok).toBe(true);
+    expect(res.result.skipped).toBe(true);
+    expect(res.result.reason).toBe('bytes-required');
+  });
+
+  it('handles a fetch HTTP error as a clean error envelope', async () => {
+    globalThis.fetch = vi.fn(async () => ({
+      ok: false,
+      status: 404,
+      headers: { get: () => null },
+    }));
+    const res = await dispatch(
+      req(MSG.ANALYZE_IMAGE, { url: 'https://cdn.example/missing.png' }),
+      pageSender,
+    );
+    expect(res.ok).toBe(false);
+    expect(res.error.message).toMatch(/HTTP 404/);
+  });
+
+  it('analyzes raw bytes sent by the content script (ANALYZE_IMAGE_BYTES)', async () => {
+    const bytes = fakeImageBytes();
+    const res = await dispatch(
+      req(MSG.ANALYZE_IMAGE_BYTES, { bytes: { data: Array.from(new Uint8Array(bytes)) } }),
+      pageSender,
+    );
+    expect(res.ok).toBe(true);
+    expect(res.result.verdict).toBe('ai');
+    expect(offscreenCalls).toBe(1);
+  });
+
+  it('rejects ANALYZE_IMAGE_BYTES with no bytes (BAD_INPUT)', async () => {
+    const res = await dispatch(req(MSG.ANALYZE_IMAGE_BYTES, {}), pageSender);
+    expect(res.ok).toBe(false);
+    expect(res.error.code).toBe('BAD_INPUT');
+  });
+
+  it('MODEL_DOWNLOAD_START delegates to model-manager.ensureModel', async () => {
+    const { ensureModel } = await import('../../src/background/model-manager.js');
+    ensureModel.mockClear();
+    const res = await dispatch(req(MSG.MODEL_DOWNLOAD_START), pageSender);
+    expect(res.ok).toBe(true);
+    expect(ensureModel).toHaveBeenCalled();
+  });
+
+  it('MODEL_DOWNLOAD_STATUS returns the model state', async () => {
+    const res = await dispatch(req(MSG.MODEL_DOWNLOAD_STATUS), pageSender);
+    expect(res.ok).toBe(true);
+    expect(res.result.status).toBe('ready');
+  });
+
+  it('GET_TAB_STATS returns per-tab tallies after an analysis', async () => {
+    const fixed = fakeImageBytes();
+    globalThis.fetch = vi.fn(async () => ({
+      ok: true,
+      headers: { get: () => null },
+      blob: async () => ({ size: 16, arrayBuffer: async () => fixed.slice(0) }),
+    }));
+    await dispatch(req(MSG.ANALYZE_IMAGE, { url: 'https://cdn.example/stat.png' }), pageSender);
+    const res = await dispatch(req(MSG.GET_TAB_STATS, { tabId: 1 }), pageSender);
+    expect(res.ok).toBe(true);
+    expect(res.result.analyzed).toBeGreaterThanOrEqual(1);
+    expect(res.result.ai).toBeGreaterThanOrEqual(1);
+  });
+
+  it('MODEL_RESET clears the model store and resets state', async () => {
+    // resetModel imports model-store dynamically; stub it via the real module path.
+    const res = await dispatch(req(MSG.MODEL_RESET), pageSender);
+    expect(res.ok).toBe(true);
+    expect(res.result.reset).toBe(true);
+  });
+
+  it('opens the onboarding page on first install when the model is not ready', async () => {
+    const { isModelReady } = await import('../../src/background/model-manager.js');
+    isModelReady.mockResolvedValueOnce(false);
+    const created = [];
+    chromeStub.chrome.tabs.create = async (t) => created.push(t);
+    let installedHandler;
+    chromeStub.chrome.runtime.onInstalled = { addListener: (fn) => (installedHandler = fn) };
+    vi.resetModules();
+    await import('../../src/background/service-worker.js');
+    await installedHandler({ reason: 'install' });
+    expect(created.length).toBe(1);
+    expect(String(created[0].url)).toContain('onboarding.html');
+  });
+
+  it('aggregates stats across tabs when GET_TAB_STATS is called without a tabId', async () => {
+    // Use the bytes path with distinct content per tab so each is a fresh analysis (not a
+    // content-hash cache hit shared across tabs).
+    const mkBytes = () => ({ data: Array.from(new Uint8Array(fakeImageBytes())) });
+    const r1 = await dispatch(req(MSG.ANALYZE_IMAGE_BYTES, { bytes: mkBytes() }), pageSender);
+    const r2 = await dispatch(req(MSG.ANALYZE_IMAGE_BYTES, { bytes: mkBytes() }), {
+      ...pageSender,
+      tab: { id: 2 },
+    });
+    expect(r1.ok && r2.ok).toBe(true);
+    // Aggregate path: no sender.tab and no payload.tabId -> sum across all tabs.
+    const res = await dispatch(req(MSG.GET_TAB_STATS, {}), { id: 'test-ext-id' });
+    expect(res.ok).toBe(true);
+    expect(res.result.analyzed).toBeGreaterThanOrEqual(2);
+  });
+
+  it("resets a tab's stats when the tab reloads (onUpdated loading)", async () => {
+    const fixed = fakeImageBytes();
+    globalThis.fetch = vi.fn(async () => ({
+      ok: true,
+      headers: { get: () => null },
+      blob: async () => ({ size: 16, arrayBuffer: async () => fixed.slice(0) }),
+    }));
+    let updatedHandler;
+    chromeStub.chrome.tabs.onUpdated = { addListener: (fn) => (updatedHandler = fn) };
+    vi.resetModules();
+    await import('../../src/background/service-worker.js');
+    await dispatch(req(MSG.ANALYZE_IMAGE, { url: 'https://cdn.example/reload.png' }), pageSender);
+    let res = await dispatch(req(MSG.GET_TAB_STATS, { tabId: 1 }), pageSender);
+    expect(res.result.analyzed).toBeGreaterThanOrEqual(1);
+    // Fire the tab-reload listener -> stats reset.
+    updatedHandler(1, { status: 'loading' });
+    res = await dispatch(req(MSG.GET_TAB_STATS, { tabId: 1 }), pageSender);
+    expect(res.result.analyzed).toBe(0);
+  });
+
+  it("drops a closed tab's stats (onRemoved)", async () => {
+    const fixed = fakeImageBytes();
+    globalThis.fetch = vi.fn(async () => ({
+      ok: true,
+      headers: { get: () => null },
+      blob: async () => ({ size: 16, arrayBuffer: async () => fixed.slice(0) }),
+    }));
+    let removedHandler;
+    chromeStub.chrome.tabs.onRemoved = { addListener: (fn) => (removedHandler = fn) };
+    vi.resetModules();
+    await import('../../src/background/service-worker.js');
+    await dispatch(req(MSG.ANALYZE_IMAGE, { url: 'https://cdn.example/close.png' }), pageSender);
+    let res = await dispatch(req(MSG.GET_TAB_STATS, { tabId: 1 }), pageSender);
+    expect(res.result.analyzed).toBeGreaterThanOrEqual(1);
+    removedHandler(1);
+    res = await dispatch(req(MSG.GET_TAB_STATS, { tabId: 1 }), pageSender);
+    expect(res.result.analyzed).toBe(0);
+  });
+
+  it('does NOT open onboarding on install when the model is already ready', async () => {
+    const created = [];
+    chromeStub.chrome.tabs.create = async (t) => created.push(t);
+    let installedHandler;
+    chromeStub.chrome.runtime.onInstalled = { addListener: (fn) => (installedHandler = fn) };
+    vi.resetModules();
+    await import('../../src/background/service-worker.js');
+    await installedHandler({ reason: 'install' }); // isModelReady() is true by default
+    expect(created.length).toBe(0);
+  });
+
+  it('rejects a sender with a foreign id even when it has a tab', async () => {
+    const res = await dispatch(req(MSG.GET_STATUS), {
+      id: 'evil-ext',
+      url: 'https://evil.test/',
+      tab: { id: 9 },
+    });
+    expect(res.ok).toBe(false);
+    expect(res.error.code).toBe('FORBIDDEN');
+  });
+
+  it('rejects a sender with a foreign origin and no tab', async () => {
+    const res = await dispatch(req(MSG.GET_STATUS), {
+      id: 'test-ext-id',
+      origin: 'https://not-us.example',
+    });
+    expect(res.ok).toBe(false);
+    expect(res.error.code).toBe('FORBIDDEN');
+  });
+
+  it('accepts a same-origin extension page (no tab)', async () => {
+    const res = await dispatch(req(MSG.PING), {
+      id: 'test-ext-id',
+      url: 'chrome-extension://test-ext-id/pages/options.html',
+    });
+    expect(res.ok).toBe(true);
+  });
+
+  it('rejects a message with no sender', async () => {
+    const res = await dispatch(req(MSG.PING), null);
+    expect(res.ok).toBe(false);
+    expect(res.error.code).toBe('FORBIDDEN');
+  });
+
+  it('ignores non-envelope messages entirely (no sendResponse)', async () => {
+    let responded = false;
+    const keepOpen = listener({ notAnEnvelope: true }, pageSender, () => (responded = true));
+    expect(keepOpen).toBe(false);
+    expect(responded).toBe(false);
+  });
+
+  it('creates the offscreen document when none exists (getContexts empty)', async () => {
+    chromeStub.chrome.runtime.getContexts = async () => []; // no existing doc
+    let created = 0;
+    chromeStub.chrome.offscreen.createDocument = async () => {
+      created++;
+    };
+    vi.resetModules();
+    await import('../../src/background/service-worker.js');
+    const res = await dispatch(
+      req(MSG.ANALYZE_IMAGE_BYTES, {
+        bytes: { data: Array.from(new Uint8Array(fakeImageBytes())) },
+      }),
+      pageSender,
+    );
+    expect(res.ok).toBe(true);
+    expect(created).toBeGreaterThanOrEqual(1);
+  });
+
+  it('returns MODEL_NOT_READY when analysis is requested before setup', async () => {
+    const { isModelReady } = await import('../../src/background/model-manager.js');
+    isModelReady.mockResolvedValueOnce(false);
+    const res = await dispatch(
+      req(MSG.ANALYZE_IMAGE_BYTES, {
+        bytes: { data: Array.from(new Uint8Array(fakeImageBytes())) },
+      }),
+      pageSender,
+    );
+    expect(res.ok).toBe(false);
+    expect(res.error.code).toBe('MODEL_NOT_READY');
+  });
+
+  it('surfaces an offscreen failure response (not-ok) as an error after recovery also fails', async () => {
+    // Both the initial warm-up AND the post-recovery retry fail -> error propagates.
+    chromeStub.chrome.offscreen.closeDocument = async () => {};
+    chromeStub.chrome.runtime.getContexts = async () => [];
+    chromeStub.chrome.runtime.sendMessage = async (msg) => {
+      if (msg.type === MSG.OFFSCREEN_ENSURE_READY) {
+        return { id: msg.id, ok: false, error: { message: 'engine dead', code: 'ENGINE' } };
+      }
+      return { id: msg.id, ok: true, result: {} };
+    };
+    const res = await dispatch(
+      req(MSG.ANALYZE_IMAGE_BYTES, {
+        bytes: { data: Array.from(new Uint8Array(fakeImageBytes())) },
+      }),
+      pageSender,
+    );
+    expect(res.ok).toBe(false);
+    expect(res.error.message).toMatch(/engine dead|init failed/i);
+  });
+
+  it('dedupes concurrent offscreen-document creation into one create call', async () => {
+    // No existing doc; two concurrent analyses must share one createDocument.
+    chromeStub.chrome.runtime.getContexts = async () => [];
+    let created = 0;
+    chromeStub.chrome.offscreen.createDocument = async () => {
+      created++;
+      await new Promise((r) => setTimeout(r, 10)); // hold creation so the 2nd caller overlaps
+    };
+    vi.resetModules();
+    await import('../../src/background/service-worker.js');
+    const bytes = () => ({ data: Array.from(new Uint8Array(fakeImageBytes())) });
+    await Promise.all([
+      dispatch(req(MSG.ANALYZE_IMAGE_BYTES, { bytes: bytes() }), pageSender),
+      dispatch(req(MSG.ANALYZE_IMAGE_BYTES, { bytes: bytes() }), pageSender),
+    ]);
+    expect(created).toBe(1);
+  });
+
+  it('tallies each verdict class into tab stats (ai/real/uncertain/error)', async () => {
+    // Drive four analyses with distinct bytes, each returning a different verdict.
+    const verdicts = ['ai', 'real', 'uncertain', 'error'];
+    let i = 0;
+    chromeStub.chrome.runtime.sendMessage = async (msg) => {
+      if (msg.type === MSG.OFFSCREEN_ENSURE_READY) {
+        return { id: msg.id, ok: true, result: { ep: 'wasm', variant: 'primary-int8' } };
+      }
+      if (msg.type === MSG.OFFSCREEN_ANALYZE) {
+        const v = verdicts[i++ % verdicts.length];
+        return {
+          id: msg.id,
+          ok: true,
+          result: { score: 0.5, verdict: v, reasons: [], ep: 'wasm', latencyMs: 1 },
+        };
+      }
+      return { id: msg.id, ok: true, result: {} };
+    };
+    for (let k = 0; k < 4; k++) {
+      await dispatch(
+        req(MSG.ANALYZE_IMAGE_BYTES, {
+          bytes: { data: Array.from(new Uint8Array(fakeImageBytes())) },
+        }),
+        pageSender,
+      );
+    }
+    const res = await dispatch(req(MSG.GET_TAB_STATS, { tabId: 1 }), pageSender);
+    expect(res.ok).toBe(true);
+    expect(res.result.analyzed).toBe(4);
+    expect(res.result.ai + res.result.real + res.result.uncertain + res.result.error).toBe(4);
+  });
+
+  it('does not record stats for a skipped result', async () => {
+    await dispatch(
+      req(MSG.SET_SITE_ENABLED, { hostname: 'site.example', enabled: false }),
+      pageSender,
+    );
+    await dispatch(
+      req(MSG.ANALYZE_IMAGE, { url: 'https://cdn.example/skip.png' }),
+      pageSender, // site disabled -> skipped
+    );
+    const res = await dispatch(req(MSG.GET_TAB_STATS, { tabId: 1 }), pageSender);
+    expect(res.result.analyzed).toBe(0);
+  });
+
+  it('setSiteEnabled uses the sender URL hostname when payload omits hostname', async () => {
+    const res = await dispatch(req(MSG.SET_SITE_ENABLED, { enabled: false }), {
+      id: 'test-ext-id',
+      url: 'https://host-from-sender.example/page',
+      tab: { id: 3 },
+    });
+    expect(res.ok).toBe(true);
+    // The rule should now exist for the sender-derived host.
+    const { loadSiteRules } = await import('../../src/shared/settings.js');
+    const rules = await loadSiteRules();
+    expect(rules['host-from-sender.example']).toBe(false);
+  });
+
+  it('setSiteEnabled errors when no hostname can be derived', async () => {
+    const res = await dispatch(
+      req(MSG.SET_SITE_ENABLED, { enabled: true }),
+      { id: 'test-ext-id' }, // no url, no payload.hostname
+    );
+    expect(res.ok).toBe(false);
+    expect(res.error.code).toBe('BAD_INPUT');
   });
 });

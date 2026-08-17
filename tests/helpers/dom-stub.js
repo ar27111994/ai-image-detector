@@ -172,6 +172,7 @@ export function installDomStub() {
       return hit ?? null;
     },
     querySelector: (sel) => body.querySelector(sel),
+    querySelectorAll: (sel) => body.querySelectorAll(sel),
     addEventListener: () => {},
     // Test helper: register an element retrievable by id.
     __register: (el) => {
@@ -187,6 +188,13 @@ export function installDomStub() {
     close: () => {},
     location: { href: 'https://example.test/' },
   };
+  // window.confirm: tests can flip this to control dialog acceptance.
+  const confirmCalls = [];
+  globalThis.confirm = (msg) => {
+    confirmCalls.push(msg);
+    return globalThis.__confirmReturn ?? true;
+  };
+  globalThis.__confirmCalls = confirmCalls;
   globalThis.ResizeObserver = class {
     constructor(cb) {
       this.cb = cb;

@@ -98,4 +98,101 @@ describe('onboarding page', () => {
     await new Promise((r) => setTimeout(r, 20));
     expect(sent).toContain(MSG.MODEL_DOWNLOAD_START);
   });
+
+  it('falls back to chrome.storage when the status message fails', async () => {
+    chromeStub.storage.set(STORAGE_KEYS.MODEL_STATE, { status: 'ready', progress: 1 });
+    chromeStub.chrome.runtime.sendMessage = async () => Promise.reject(new Error('no SW'));
+    vi.resetModules();
+    await import('../../src/onboarding/onboarding.js');
+    await new Promise((r) => setTimeout(r, 30));
+    const status = document.getElementById('status');
+    expect(textOf(status)).toMatch(/Model ready/);
+  });
+
+  it('re-renders on a MODEL_DOWNLOAD_PROGRESS message', async () => {
+    await loadOnboarding({
+      status: 'downloading',
+      progress: 0.1,
+      downloadedBytes: 1e7,
+      totalBytes: 1e8,
+    });
+    const status = document.getElementById('status');
+    // Drive the runtime.onMessage listener registered by init().
+    const listeners = chromeStub.listeners?.message ?? [];
+    expect(listeners.length).toBeGreaterThan(0);
+    for (const fn of listeners) {
+      fn(
+        {
+          type: MSG.MODEL_DOWNLOAD_PROGRESS,
+          payload: { status: 'downloading', progress: 0.9, downloadedBytes: 9e7, totalBytes: 1e8 },
+        },
+        {},
+        () => {},
+      );
+    }
+    await new Promise((r) => setTimeout(r, 20));
+    expect(textOf(status)).toMatch(/90%/);
+  });
+
+  it('re-renders on a storage change to the model state', async () => {
+    await loadOnboarding({
+      status: 'downloading',
+      progress: 0.5,
+      downloadedBytes: 5e7,
+      totalBytes: 1e8,
+    });
+    const status = document.getElementById('status');
+    const changed = chromeStub.listeners?.changed ?? [];
+    expect(changed.length).toBeGreaterThan(0);
+    for (const fn of changed) {
+      fn({ [STORAGE_KEYS.MODEL_STATE]: { newValue: { status: 'ready', progress: 1 } } }, 'local');
+    }
+    await new Promise((r) => setTimeout(r, 20));
+    expect(textOf(status)).toMatch(/Model ready/);
+  });
+
+  it('shows "Failed to start" when MODEL_DOWNLOAD_START rejects', async () => {
+    await loadOnboarding({ status: 'missing', progress: 0 });
+    const status = document.getElementById('status');
+    const start = all(status).find(
+      (n) => n.tagName === 'BUTTON' && /Download model/.test(n.textContent),
+    );
+    chromeStub.chrome.runtime.sendMessage = async () => Promise.reject(new Error('no route'));
+    start.click();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(textOf(status)).toMatch(/Failed to start/i);
+  });
+
+  it('shows "?" for unknown total size during a download', async () => {
+    await loadOnboarding({
+      status: 'downloading',
+      progress: 0.5,
+      downloadedBytes: 5e7,
+      totalBytes: 0,
+    });
+    const status = document.getElementById('status');
+    expect(textOf(status)).toMatch(/\? MB/);
+  });
+
+  it('ignores non-progress messages on the runtime channel', async () => {
+    await loadOnboarding({ status: 'missing', progress: 0 });
+    const status = document.getElementById('status');
+    const listeners = chromeStub.listeners?.message ?? [];
+    for (const fn of listeners) fn({ type: 'some-other-message', payload: {} }, {}, () => {});
+    await new Promise((r) => setTimeout(r, 10));
+    // Still on the missing/download CTA — no crash, no spurious re-render.
+    expect(textOf(status)).toMatch(/Download model/);
+  });
+
+  it('ignores storage changes for other keys/areas', async () => {
+    await loadOnboarding({ status: 'missing', progress: 0 });
+    const status = document.getElementById('status');
+    const changed = chromeStub.listeners?.changed ?? [];
+    for (const fn of changed) {
+      fn({ unrelated: { newValue: 1 } }, 'local'); // wrong key
+      fn({ [STORAGE_KEYS.MODEL_STATE]: { newValue: { status: 'ready' } } }, 'sync'); // wrong area
+    }
+    await new Promise((r) => setTimeout(r, 10));
+    expect(textOf(status)).toMatch(/Download model/);
+  });
 });

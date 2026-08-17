@@ -8,10 +8,12 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'html', 'lcov', 'json-summary'],
       reportsDirectory: 'coverage',
-      // Coverage is scoped to the pure, platform-independent logic plus the model manager
-      // (heavily unit-tested). The service worker router / offscreen inference engine / content
-      // script are covered by the integration (mock-chrome) and e2e suites in real Chrome.
-      include: ['src/shared/**/*.js', 'src/background/model-manager.js'],
+      // Coverage spans ALL of src/ and the gate is 90% on every metric. The pure logic
+      // (src/shared, model-manager) sits near 100%; the runtime/UI modules (service worker,
+      // offscreen orchestrator + inference engine, content script, pages) are unit-tested via
+      // the shared DOM/chrome stub with onnxruntime-web and canvas mocked. The remaining
+      // hard-to-reach lines (live WebGPU/WASM session internals) are covered by the e2e suite.
+      include: ['src/**/*.js'],
       exclude: ['src/**/vendor/**'],
       thresholds: {
         lines: 90,

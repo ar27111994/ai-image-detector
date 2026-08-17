@@ -137,6 +137,29 @@ describe('badges.setBadge', () => {
     expect(badge.dataset.verdict).toBe('ai');
   });
 
+  it('falls back to the error token for an unknown verdict string', () => {
+    const img = makeImage();
+    setBadge(img, { score: 0.5, verdict: 'not-a-real-verdict' }, { show: true });
+    const badge = body.children.at(-1).shadowRoot.children.find((c) => c.className === 'badge');
+    expect(badge.dataset.verdict).toBe('not-a-real-verdict'); // recorded as-is
+    // ...but rendered with the error presentation token (gray N/A fallback).
+    expect(badge.textContent).toContain('50%');
+  });
+
+  it('derives the verdict from the score when verdict is omitted (null score -> error)', () => {
+    const img = makeImage();
+    setBadge(img, { score: null }, { show: true });
+    const badge = body.children.at(-1).shadowRoot.children.find((c) => c.className === 'badge');
+    expect(badge.textContent).toContain('N/A');
+  });
+
+  it('derives an uncertain verdict when verdict is omitted but a score exists', () => {
+    const img = makeImage();
+    setBadge(img, { score: 0.5 }, { show: true });
+    const badge = body.children.at(-1).shadowRoot.children.find((c) => c.className === 'badge');
+    expect(badge.textContent).toContain('50%');
+  });
+
   it('renders a real verdict badge', () => {
     const img = makeImage();
     setBadge(img, { score: 0.05, verdict: 'real' }, { show: true });
@@ -194,7 +217,7 @@ describe('badges.setBadge', () => {
     expect(badge.attributes['aria-expanded']).toBe('false');
   });
 
-  it('encodes the result safely (no XSS via reasons)', () => {
+  it('renders hostile reasons as inert text (no XSS via the detail panel)', () => {
     const img = makeImage();
     setBadge(
       img,
@@ -203,11 +226,64 @@ describe('badges.setBadge', () => {
     );
     const host = body.children.at(-1);
     const badge = host.shadowRoot.children.find((c) => c.className === 'badge');
-    // panel content must be HTML-escaped
     badge.dispatch('click');
     const panel = host.shadowRoot.children.find((c) => c.className === 'badge-panel');
     expect(panel).toBeTruthy();
-    // the escapeHtml path encodes < > " ' — no live markup from the hostile reason
-    expect(panel._html ?? '').not.toContain('<img onerror');
+    // The panel is built with textContent (no innerHTML): the hostile string must appear as
+    // literal text and no element markup must be created from it.
+    const walk = (n, acc = []) => {
+      acc.push(n);
+      for (const c of n.children ?? []) walk(c, acc);
+      return acc;
+    };
+    const nodes = walk(panel);
+    const dd = nodes.find((n) => n.tagName === 'DD' && (n._text ?? '').includes('onerror'));
+    expect(dd).toBeTruthy();
+    expect(dd._text).toContain('<img onerror=alert(1)>');
+    expect(nodes.some((n) => n.tagName === 'IMG')).toBe(false);
+  });
+
+  it('repositions the badge host to follow the image rect', () => {
+    const img = makeImage();
+    img.getBoundingClientRect = () => ({ left: 40, top: 60, width: 200, height: 100 });
+    setBadge(img, { score: 0.9, verdict: 'ai' }, { show: true });
+    const host = body.children.at(-1);
+    // positionHost ran on attach: host is positioned over the image rect.
+    expect(host.style.left).toBe('40px');
+    expect(host.style.top).toBe('60px');
+    expect(host.style.width).toBe('200px');
+    expect(host.style.height).toBe('100px');
+  });
+
+  it('reuses the existing badge host when setBadge is called again (no duplicate hosts)', () => {
+    const img = makeImage();
+    setBadge(img, { score: 0.5, verdict: 'uncertain' }, { show: true });
+    const before = body.children.length;
+    setBadge(img, { score: 0.9, verdict: 'ai' }, { show: true }); // update in place
+    expect(body.children.length).toBe(before); // no new host appended
+    const badge = body.children.at(-1).shadowRoot.children.find((c) => c.className === 'badge');
+    expect(badge.dataset.verdict).toBe('ai');
+  });
+
+  it('positions the badge in each corner per the position option', () => {
+    for (const pos of ['top-left', 'top-right', 'bottom-left', 'bottom-right']) {
+      const img = makeImage();
+      setBadge(img, { score: 0.9, verdict: 'ai' }, { show: true, position: pos });
+      const badge = body.children.at(-1).shadowRoot.children.find((c) => c.className === 'badge');
+      const style = badge.getAttribute('style');
+      const [corner, edge] = pos.split('-');
+      expect(style).toContain(`${corner === 'top' ? 'top' : 'bottom'}:4px`);
+      expect(style).toContain(`${edge === 'left' ? 'left' : 'right'}:4px`);
+    }
+  });
+
+  it('removing a badge tears down its observers so a detached element leaves no host', () => {
+    const img = makeImage();
+    setBadge(img, { score: 0.9, verdict: 'ai' }, { show: true });
+    const host = body.children.at(-1);
+    removeBadge(img);
+    expect(host.isConnected).toBe(false);
+    // A second remove is a safe no-op.
+    expect(() => removeBadge(img)).not.toThrow();
   });
 });

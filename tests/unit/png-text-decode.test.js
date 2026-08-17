@@ -76,6 +76,42 @@ describe('png-text extractPngText decode paths', () => {
     const pairs = await extractPngText(pngWith([bad, good]));
     expect(pairs).toContainEqual({ key: 'a', value: 'b' });
   });
+
+  it('returns null value for a zTXt chunk with an unknown compression method', async () => {
+    // keyword\x00 method(1 — invalid, only 0=deflate is valid) -> value:null without inflating.
+    const kv = new Uint8Array([...enc.encode('parameters'), 0, 1, 0, 0, 0]);
+    const pairs = await extractPngText(pngWith([pngChunk('zTXt', kv)]));
+    expect(pairs[0]).toEqual({ key: 'parameters', value: null });
+  });
+
+  it('returns null for a zTXt chunk with no null separator', async () => {
+    const kv = new Uint8Array([1, 2, 3, 4]); // no \x00
+    const pairs = await extractPngText(pngWith([pngChunk('zTXt', kv)]));
+    expect(pairs).toEqual([]);
+  });
+
+  it('decodes a compressed iTXt chunk (compressionFlag=1, method=0)', async () => {
+    const compressed = await deflate(enc.encode('{"1":{"class_type":"KSampler"}}'));
+    const kv = new Uint8Array([
+      ...enc.encode('prompt'),
+      0,
+      1, // compressionFlag = compressed
+      0, // method = deflate
+      0, // language tag (empty) + null
+      0, // translated keyword (empty) + null
+      ...compressed,
+    ]);
+    const pairs = await extractPngText(pngWith([pngChunk('iTXt', kv)]));
+    expect(pairs[0].key).toBe('prompt');
+    expect(pairs[0].value).toContain('class_type');
+  });
+
+  it('returns null value for a truncated iTXt chunk (keyword but no flag bytes)', async () => {
+    // keyword\x00 then nothing (i+2 > length) -> { key, value:null }
+    const kv = new Uint8Array([...enc.encode('prompt'), 0]);
+    const pairs = await extractPngText(pngWith([pngChunk('iTXt', kv)]));
+    expect(pairs[0]).toEqual({ key: 'prompt', value: null });
+  });
 });
 
 describe('xmp extractXmpPackets', () => {

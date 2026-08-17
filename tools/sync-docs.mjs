@@ -96,9 +96,18 @@ async function syncReadmeBadge(values, { check }) {
   const num = values.BA_BADGE;
   if (!num) return false;
   const re =
-    /\[!\[Balanced accuracy: [\d.]+%\]\(https:\/\/img\.shields\.io\/badge\/balanced%20accuracy-[\d.]+(%25)-[a-z]+\)\]\(docs\/BENCHMARK\.md\)/;
+    /\[!\[Balanced accuracy: [\d.]+%\]\(https:\/\/img\.shields\.io\/badge\/balanced%20accuracy-[\d.]+%25-[a-z]+\)\]\(docs\/BENCHMARK\.md\)/;
   const replacement = `[![Balanced accuracy: ${num}%](https://img.shields.io/badge/balanced%20accuracy-${num}%25-success)](docs/BENCHMARK.md)`;
-  if (!re.test(content)) return false; // badge line not found / unexpected shape — leave it alone
+  if (!re.test(content)) {
+    // Fail loud: a silently-skipped badge update would let the README drift from the measured
+    // accuracy with no signal. Treat an unrecognizable/missing badge line as an error.
+    console.error(
+      '[sync] ERROR: README.md accuracy badge not found or in an unexpected shape — ' +
+        'update the regex in syncReadmeBadge() or restore the badge line.',
+    );
+    process.exitCode = 1;
+    return false;
+  }
   const next = content.replace(re, replacement);
   const changed = next !== content;
   if (changed) {

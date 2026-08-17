@@ -159,4 +159,62 @@ describe('forensic-extractor', () => {
     expect(out.definitive).toBe(true);
     expect(out.summary.join(' ')).toMatch(/c2pa/i);
   });
+
+  it('reports a C2PA manifest as present-but-not-definitive when no AI generator is named', async () => {
+    // C2PA manifest present but with a real-camera claim (no AI signature) -> present, not hit.
+    const enc = new TextEncoder();
+    const uuid = [
+      0x63, 0x32, 0x6d, 0x61, 0x00, 0x11, 0x00, 0x10, 0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b,
+      0x71,
+    ];
+    const claim = enc.encode('{"claim_generator":"Canon EOS R5","actions":["c2pa.created"]}');
+    const jumbf = new Uint8Array([...uuid, 0, 0, 0, 0, ...claim]);
+    const cabx = [];
+    const len = jumbf.length;
+    cabx.push((len >>> 24) & 0xff, (len >>> 16) & 0xff, (len >>> 8) & 0xff, len & 0xff);
+    cabx.push(...enc.encode('caBX'));
+    cabx.push(...jumbf);
+    cabx.push(0, 0, 0, 0);
+    const sig = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+    const iend = [0, 0, 0, 0, ...enc.encode('IEND'), 0, 0, 0, 0];
+    const png = new Uint8Array([...sig, ...cabx, ...iend]).buffer;
+    const out = await extractForensicSignals(png);
+    expect(out.features.c2paPresent).toBe(true);
+    expect(out.features.c2paHit).toBe(false);
+    expect(out.definitive).toBe(false);
+    expect(out.summary.join(' ')).toMatch(/C2PA manifest present/i);
+  });
+
+  it('detects A1111 geninfo in EXIF UserComment (JPEG) as definitive', async () => {
+    // JPEG APP1 EXIF with a UserComment containing A1111 parameters. We build a minimal EXIF
+    // block; exifr parses it best-effort. The point is the UserComment decode branch.
+    const enc = new TextEncoder();
+    const exifHeader = enc.encode('Exif\0\0');
+    const comment = enc.encode('Steps: 20, Sampler: Euler a, CFG scale: 7');
+    const payload = new Uint8Array([...exifHeader, ...comment]);
+    const segLen = payload.length + 2;
+    const jpeg = new Uint8Array([
+      0xff,
+      0xd8,
+      0xff,
+      0xe1,
+      (segLen >>> 8) & 0xff,
+      segLen & 0xff,
+      ...payload,
+      0xff,
+      0xd9,
+    ]).buffer;
+    const out = await extractForensicSignals(jpeg);
+    // Whether or not exifr fully parses this minimal block, the call must not throw and must
+    // return a structured result.
+    expect(out.format).toBe('jpeg');
+    expect(typeof out.definitive).toBe('boolean');
+  });
+
+  it('skips EXIF analysis for a format with no EXIF container (gif/unknown)', async () => {
+    const garbage = new Uint8Array([0x00, 0x01, 0x02, 0x03]).buffer;
+    const out = await extractForensicSignals(garbage);
+    expect(out.format).toBe('unknown');
+    expect(out.features.hasCameraExif).toBeNull();
+  });
 });

@@ -72,6 +72,22 @@ describe('discovery.resolveUrl', () => {
   it('returns null for unparseable input without throwing', () => {
     expect(() => resolveUrl('ht!tp://bad url with spaces')).not.toThrow();
   });
+
+  it('returns null when the URL constructor throws (invalid base/URL)', () => {
+    // Force the catch branch by pointing the base at an unparseable location.
+    const prevLocation = globalThis.location;
+    globalThis.location = { href: 'ht!tp://invalid base with spaces' };
+    try {
+      expect(resolveUrl('img/x.png')).toBeNull();
+    } finally {
+      globalThis.location = prevLocation;
+    }
+  });
+
+  it('resolves nullish/odd inputs to a same-origin URL (WHATWG URL is lenient)', () => {
+    // Documents the real behavior: the URL constructor stringifies + resolves, not throws.
+    expect(resolveUrl('://')).toContain('https://example.test/');
+  });
 });
 
 describe('discovery.urlForElement', () => {
@@ -132,5 +148,77 @@ describe('discovery.meetsMinSize / elementSize', () => {
 
   it('elementSize reads the bounding rect', () => {
     expect(elementSize(makeEl('img', { _w: 300, _h: 150 }))).toEqual({ width: 300, height: 150 });
+  });
+});
+
+// --- discoverImages / discoverBackgroundImages: DOM-walking entry points -----------------
+describe('discovery.discoverImages / discoverBackgroundImages', () => {
+  function makeScanEl(tag, attrs = {}, computed = {}) {
+    const el = makeEl(tag, attrs, computed);
+    el.attributes = attrs;
+    el.classList = { contains: () => false };
+    return el;
+  }
+
+  it('collects img/picture-source/input-image/video-poster elements', async () => {
+    const { discoverImages } = await import('../../src/content/discovery.js');
+    const img = makeScanEl('img', { src: 'a.png' });
+    const source = makeScanEl('source', { srcset: 'b.png 1x' });
+    const input = makeScanEl('input', { type: 'image', src: 'c.png' });
+    const video = makeScanEl('video', { poster: 'd.png' });
+    const root = {
+      querySelectorAll: (sel) => {
+        if (sel === 'img') return [img];
+        if (sel === 'picture source') return [source];
+        if (sel === 'input[type="image"]') return [input];
+        if (sel === 'video[poster]') return [video];
+        return [];
+      },
+    };
+    const found = discoverImages(root);
+    expect(found).toContain(img);
+    expect(found).toContain(source);
+    expect(found).toContain(input);
+    expect(found).toContain(video);
+    // Dedup: same element added by two selectors appears once.
+  });
+
+  it('discoverBackgroundImages returns only elements with a non-trivial background-image of sufficient size', async () => {
+    const { discoverBackgroundImages } = await import('../../src/content/discovery.js');
+    const withBg = makeScanEl('div', { _w: 100, _h: 100 }, { backgroundImage: 'url("bg.png")' });
+    const noBg = makeScanEl('div', { _w: 100, _h: 100 }, { backgroundImage: 'none' });
+    const tooSmall = makeScanEl('div', { _w: 4, _h: 4 }, { backgroundImage: 'url("s.png")' });
+    const all = [withBg, noBg, tooSmall];
+    // Stub createTreeWalker over the flat list.
+    const prevTW = globalThis.document?.createTreeWalker;
+    globalThis.document = globalThis.document ?? {};
+    globalThis.document.createTreeWalker = () => {
+      let i = -1;
+      return { nextNode: () => all[++i] ?? null };
+    };
+    globalThis.NodeFilter = { SHOW_ELEMENT: 1 };
+    const out = discoverBackgroundImages(globalThis.document);
+    expect(out).toContain(withBg);
+    expect(out).not.toContain(noBg);
+    expect(out).not.toContain(tooSmall);
+    if (prevTW) globalThis.document.createTreeWalker = prevTW;
+  });
+
+  it('discoverBackgroundImages respects the maxScan bound', async () => {
+    const { discoverBackgroundImages } = await import('../../src/content/discovery.js');
+    const many = Array.from({ length: 50 }, () =>
+      makeScanEl('div', { _w: 100, _h: 100 }, { backgroundImage: 'url("bg.png")' }),
+    );
+    let returned = 0; // how many elements the walker yielded (the source scans each yielded node)
+    const prevTW = globalThis.document?.createTreeWalker;
+    globalThis.document = globalThis.document ?? {};
+    globalThis.document.createTreeWalker = () => ({
+      nextNode: () => many[returned++] ?? null,
+    });
+    globalThis.NodeFilter = { SHOW_ELEMENT: 1 };
+    const out = discoverBackgroundImages(globalThis.document, 10);
+    expect(returned).toBeLessThanOrEqual(11); // 10 scanned + 1 terminal null probe
+    expect(out.length).toBeLessThanOrEqual(10);
+    if (prevTW) globalThis.document.createTreeWalker = prevTW;
   });
 });

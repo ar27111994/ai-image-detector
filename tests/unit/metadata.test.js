@@ -64,6 +64,23 @@ describe('containers.detectFormat', () => {
   it('returns unknown for garbage', () => {
     expect(detectFormat(new Uint8Array([1, 2, 3]).buffer)).toBe('unknown');
   });
+  it('detects gif (GIF87a/89a)', () => {
+    expect(detectFormat(new TextEncoder().encode('GIF89a' + '\0'.repeat(10)).buffer)).toBe('gif');
+  });
+  it('detects avif-or-bmff from an ftyp box', () => {
+    const b = new Uint8Array(16);
+    b.set([0, 0, 0, 0, 0x66, 0x74, 0x79, 0x70], 0); // ftyp at offset 4
+    expect(detectFormat(b.buffer)).toBe('avif-or-bmff');
+  });
+  it('returns unknown for a RIFF container that is not WEBP', () => {
+    const b = new Uint8Array(16);
+    b.set([0x52, 0x49, 0x46, 0x46], 0); // RIFF but no WEBP fourcc
+    b.set([0x57, 0x41, 0x56, 0x45], 8); // 'WAVE' instead
+    expect(detectFormat(b.buffer)).toBe('unknown');
+  });
+  it('returns unknown when input is shorter than the 12-byte minimum', () => {
+    expect(detectFormat(new Uint8Array([0x89, 0x50, 0x4e, 0x47]).buffer)).toBe('unknown');
+  });
 });
 
 describe('containers.parsePngChunks', () => {
