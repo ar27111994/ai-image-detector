@@ -165,7 +165,8 @@ function siteToggle() {
     let host = null;
     try {
       const u = new URL(url);
-      host = /^https?$/.test(u.protocol) ? u.hostname : null;
+      // URL.protocol includes the trailing colon ("https:").
+      host = u.protocol === 'https:' || u.protocol === 'http:' ? u.hostname : null;
     } catch {
       host = null;
     }
