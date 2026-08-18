@@ -4,8 +4,11 @@ name: Dependabot auto-merge
 # build.mjs (npm run build) makes an incompatible onnxruntime bump fail the build job, so a bad
 # dependency update can never be merged green.
 
+# pull_request_target: this workflow runs in the BASE repo's trust context (needed for the
+# auto-merge GraphQL mutation — pull_request gets a read-only token for Dependabot PRs). It never
+# checks out or executes PR code; it only toggles auto-merge on the PR. Safe per GitHub guidance.
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, synchronize, reopened, labeled]
 
 permissions:

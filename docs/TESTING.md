@@ -9,11 +9,11 @@
 | Benchmark   | `node bench/run-pipeline.mjs --model haywoodsloan-int8` | Full detection stack over the labeled public benchmark via onnxruntime-node; **exits non-zero below the 75% bar**                                                                                                                                                                                                                                                                             |
 | E2E         | `npm run test:e2e`                                      | Real extension in headless Chrome-for-Testing: SW start, content-script inject, discovery + lazy-load, SPA navigation, graceful degradation pre-setup, options-page render, badge-mount (shadow-DOM host + accessible button, event-driven waitFor)                                                                                                                                           |
 | Lint/format | `npm run lint` / `npm run format:check`                 | ESLint flat + Prettier (both block CI on failure)                                                                                                                                                                                                                                                                                                                                             |
-| Coverage    | `npm run cover`                                         | v8 coverage on `src/shared/**` + `src/background/model-manager.js`, 90% floor on lines/branches/functions/statements                                                                                                                                                                                                                                                                          |
+| Coverage    | `npm run cover`                                         | v8 coverage on **all of `src/**`\*\* (excl. vendored), 90% floor on lines/branches/functions/statements                                                                                                                                                                                                                                                                                       |
 
 ## Test counts
 
-<!-- AUTO:TEST_COUNT -->482<!-- /AUTO:TEST_COUNT --> tests across <!-- AUTO:TEST_FILES -->35<!-- /AUTO:TEST_FILES --> files (unit + integration), plus 7 e2e cases in real Chrome.
+<!-- AUTO:TEST_COUNT -->484<!-- /AUTO:TEST_COUNT --> tests across <!-- AUTO:TEST_FILES -->35<!-- /AUTO:TEST_FILES --> files (unit + integration), plus 7 e2e cases in real Chrome.
 
 > Test counts, coverage %, and benchmark accuracy in the docs are auto-synced from the source of
 > truth via `npm run docs:sync` (see CONTRIBUTING.md). The `test` CI job fails if they drift
@@ -25,7 +25,7 @@ The enforced **90% floor** (lines/branches/functions/statements) spans **all of 
 currently
 
 <!-- AUTO:COV_LINES -->98.4<!-- /AUTO:COV_LINES --> lines /
-<!-- AUTO:COV_BRANCHES -->91.2<!-- /AUTO:COV_BRANCHES --> branches /
+<!-- AUTO:COV_BRANCHES -->91.3<!-- /AUTO:COV_BRANCHES --> branches /
 <!-- AUTO:COV_FUNCS -->98.1<!-- /AUTO:COV_FUNCS --> functions.
 
 Breakdown: the pure, platform-independent logic (`src/shared/**`, `src/background/model-manager.js`)

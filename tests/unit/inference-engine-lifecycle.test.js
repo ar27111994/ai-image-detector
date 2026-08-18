@@ -245,6 +245,20 @@ describe('inference-engine lifecycle', () => {
     await expect(engine.analyzeImageBytes(new ArrayBuffer(4))).rejects.toThrow(/not initialized/);
   });
 
+  it('loadSession rejects a tampered/corrupted blob (load-time integrity check)', async () => {
+    // A variant with a pinned sha256 whose stored blob does NOT match must fail at load, not reach
+    // the inference session. (Covers the SECURITY.md "verified before load" guarantee.)
+    const { sha256Hex } = await import('../../src/shared/hash.js');
+    const realBytes = new ArrayBuffer(8);
+    const tampered = { ...SPEC, sha256: await sha256Hex(new Uint8Array([9, 9, 9, 9]).buffer) };
+    modelBlobs.set('primary-int8', { arrayBuffer: async () => realBytes });
+    const engine = await freshEngine();
+    const pick = async () => tampered;
+    await expect(engine.loadSession({ variants: [tampered] }, pick)).rejects.toThrow(
+      /integrity|no usable execution provider/,
+    );
+  });
+
   it('engineStatus reports uninitialized before loadSession', async () => {
     const engine = await freshEngine();
     const s = engine.engineStatus();

@@ -14,6 +14,7 @@ import { preprocessRgba } from '../shared/preprocess.js';
 import { getModelBlob } from '../shared/model-store.js';
 import { computeViewRects, meanLogits } from '../shared/tta.js';
 import { clamp01, softmaxProbability } from '../shared/math.js';
+import { sha256Hex } from '../shared/hash.js';
 import { TIMEOUTS } from '../shared/constants.js';
 
 /** Ordered EP preference; wasm is the guaranteed fallback. */
@@ -74,6 +75,19 @@ async function doLoad(manifest, pickVariant) {
       const blob = await getModelBlob(variant.key);
       if (!blob) throw new Error(`variant '${variant.key}' not downloaded`);
       const bytes = await blob.arrayBuffer();
+      // Re-verify integrity at load (not just at download/persist): a corrupted or tampered
+      // IndexedDB entry must never reach the inference session. The SHA-256 pin is authoritative.
+      if (variant.sha256) {
+        const actual = await sha256Hex(bytes);
+        if (actual.toLowerCase() !== variant.sha256.toLowerCase()) {
+          throw Object.assign(
+            new Error(
+              `model integrity check failed at load: expected ${variant.sha256}, got ${actual}`,
+            ),
+            { code: 'INTEGRITY' },
+          );
+        }
+      }
 
       const t0 = performance.now();
       const created = await createSessionForEp(bytes, ep, variant);

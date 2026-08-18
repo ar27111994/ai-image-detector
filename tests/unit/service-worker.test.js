@@ -189,6 +189,28 @@ describe('service-worker router', () => {
     expect(offscreenCalls).toBe(0);
   });
 
+  it('applies the TOP-LEVEL tab site rule to a cross-origin iframe request (all_frames)', async () => {
+    // Disable the top-level site; a request from a cross-origin iframe (sender.url = iframe host,
+    // sender.tab.url = the disabled page) must be skipped — the page rule governs, not the frame's.
+    await dispatch(
+      req(MSG.SET_SITE_ENABLED, { hostname: 'site.example', enabled: false }),
+      pageSender,
+    );
+    const frameSender = {
+      id: 'test-ext-id',
+      url: 'https://cdn.embedded.example/frame', // cross-origin iframe
+      tab: { id: 1, url: 'https://site.example/page' }, // the disabled top-level page
+    };
+    const res = await dispatch(
+      req(MSG.ANALYZE_IMAGE, { url: 'https://cdn.embedded.example/x.png' }),
+      frameSender,
+    );
+    expect(res.ok).toBe(true);
+    expect(res.result.skipped).toBe(true);
+    expect(res.result.reason).toBe('site-disabled');
+    expect(offscreenCalls).toBe(0);
+  });
+
   it('recovers when the offscreen document fails once (recreate + retry)', async () => {
     // First ENSURE_READY fails (simulating a crashed offscreen doc); the SW should recreate
     // the document and retry, succeeding on the second attempt.

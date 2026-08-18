@@ -163,9 +163,24 @@ into the v1.0.0 submission.
   it on the vision sub-config, not the top level), normalizes tuple/list sizes, and still interpolates
   positional embeddings on export + validation for non-configured sizes.
 
+### Fixed (PR #1 review round 13 — cross-frame site rules + load-time integrity + CI/docs)
+
+- **Cross-origin iframes follow the top-level page's site rule.** With `all_frames`, the per-site
+  disable rule is now keyed on `sender.tab.url` (the top-level page) rather than the frame's own
+  `sender.url`, so disabling a site also stops scanning its cross-origin iframes.
+- **Model integrity is verified at load, not only at download.** `loadSession` re-hashes the stored
+  blob against the manifest's SHA-256 pin before creating the inference session, so a corrupted or
+  tampered IndexedDB entry can never reach inference (backs the SECURITY.md "verified before load"
+  guarantee with an actual check).
+- **Dependabot auto-merge runs on `pull_request_target`** — `pull_request` gets a read-only token for
+  Dependabot PRs, so the GraphQL auto-merge mutation couldn't run. The workflow never checks out or
+  executes PR code, so the trusted-context trigger is safe here.
+- **TESTING.md coverage description corrected** — the 90% gate covers all of `src/**`, not only
+  `src/shared` + model-manager.
+
 ### Testing
 
-- **482 tests / 35 files** (was 227/24 at v1.0.0). New unit suites for the previously untested
+- **484 tests / 35 files** (was 227/24 at v1.0.0). New unit suites for the previously untested
   popup/options/onboarding pages, the offscreen orchestrator, the service-worker router, and the
   manifest verifier (`tools/verify-manifest.mjs`). Concurrency/stress suites (50-unique and
   50-identical-image stampedes verifying exactly-once inference and cache-collapse, plus

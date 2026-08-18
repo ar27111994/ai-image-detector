@@ -291,7 +291,7 @@ async function analyzeByUrl(payload, sender) {
   }
 
   const settings = await loadSettings();
-  const host = sender?.url ? safeHostname(sender.url) : null;
+  const host = siteRuleHostname(sender);
   if (host && !(await isSiteEnabled(host))) {
     return { skipped: true, reason: 'site-disabled' };
   }
@@ -316,7 +316,7 @@ async function analyzeByBytes(payload, sender) {
   // Enforce the per-site disable rule on the byte-relay path too: content scripts still discover
   // data:/blob: images on a disabled page and route them here, so they must be skipped like
   // URL-backed images.
-  const host = sender?.url ? safeHostname(sender.url) : null;
+  const host = siteRuleHostname(sender);
   if (host && !(await isSiteEnabled(host))) {
     return { skipped: true, reason: 'site-disabled' };
   }
@@ -362,6 +362,18 @@ function safeHostname(url) {
   } catch {
     return null;
   }
+}
+
+/**
+ * The hostname whose per-site rule governs a content-script request. With `all_frames`, each
+ * iframe runs its own content script and reports its own `sender.url`; the user's per-site rule
+ * is keyed on the top-level tab's hostname, so prefer `sender.tab.url` (main frame) over the
+ * frame's own URL. This keeps cross-origin iframes subject to the page the user disabled.
+ * @param {chrome.runtime.MessageSender} sender
+ * @returns {string|null}
+ */
+function siteRuleHostname(sender) {
+  return safeHostname(sender?.tab?.url) ?? (sender?.url ? safeHostname(sender.url) : null);
 }
 
 async function analyzeBytes(bytes, sourceUrl, minSize, threshold) {
