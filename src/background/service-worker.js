@@ -279,7 +279,12 @@ async function analyzeByUrl(payload, sender) {
   }
 
   const bytes = await fetchImageBytes(url);
-  const result = await analyzeBytes(bytes, url, minSize ?? settings.minImageSize);
+  const result = await analyzeBytes(
+    bytes,
+    url,
+    minSize ?? settings.minImageSize,
+    settings.threshold,
+  );
   recordTabVerdict(sender?.tab?.id, result);
   return result;
 }
@@ -289,7 +294,12 @@ async function analyzeByBytes(payload, sender) {
   const buffer = normalizeBytes(bytes);
   if (!buffer) throw Object.assign(new Error('bytes required'), { code: 'BAD_INPUT' });
   const settings = await loadSettings();
-  const result = await analyzeBytes(buffer, null, minSize ?? settings.minImageSize);
+  const result = await analyzeBytes(
+    buffer,
+    null,
+    minSize ?? settings.minImageSize,
+    settings.threshold,
+  );
   recordTabVerdict(sender?.tab?.id, result);
   return result;
 }
@@ -308,8 +318,10 @@ function safeHostname(url) {
   }
 }
 
-async function analyzeBytes(bytes, sourceUrl, minSize) {
-  const key = await imageContentKey(bytes);
+async function analyzeBytes(bytes, sourceUrl, minSize, threshold) {
+  // The cache key must include the decision threshold: the verdict is threshold-dependent, so a
+  // result classified at one threshold must not be served for a request using a different one.
+  const key = `${await imageContentKey(bytes)}|t=${threshold}`;
   const hit = analysisCache.get(key);
   if (hit) return { ...hit, cached: true };
 
@@ -326,7 +338,7 @@ async function analyzeBytes(bytes, sourceUrl, minSize) {
         id: nextId('analyze'),
         type: MSG.OFFSCREEN_ANALYZE,
         target: 'offscreen',
-        payload: { contentHash: key, bytes, minSize },
+        payload: { contentHash: key, bytes, minSize, threshold },
       },
       { timeoutMs: TIMEOUTS.ANALYZE_MS },
     );
@@ -410,10 +422,14 @@ async function startModelDownload() {
   // The dedup entry is ABANDONABLE, not permanent: the underlying download can stall forever
   // (fetch/reader.read() carry no abort signal here), so we race it against a deadline. On
   // timeout the promise rejects and the finally clears the entry, so the next start begins a
-  // fresh download instead of awaiting the stuck one until the service worker restarts.
+  // fresh download instead of awaiting the stuck one until the service worker restarts. Each
+  // attempt carries a generation token: a superseded (timed-out) attempt keeps running in the
+  // background, but model-manager drops its late state/blob commits so it can't overwrite the
+  // retry's result.
   if (downloadingModel) return await downloadingModel;
+  const gen = modelManager.beginModelSetup();
   downloadingModel = withTimeout(
-    modelManager.ensureModel('wasm'), // safe default; EP re-selected at inference
+    modelManager.ensureModel('wasm', undefined, gen), // safe default; EP re-selected at inference
     TIMEOUTS.MODEL_DOWNLOAD_MS,
     'model download',
   );
@@ -425,6 +441,8 @@ async function startModelDownload() {
 }
 
 async function resetModel() {
+  // Invalidate any in-flight download so its late settlement can't repopulate state after reset.
+  modelManager.beginModelSetup();
   const { clearModelStore } = await import('../shared/model-store.js');
   await clearModelStore();
   await chrome.storage.local.set({

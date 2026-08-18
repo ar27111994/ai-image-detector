@@ -95,8 +95,10 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). In short:
 - An **offscreen document** runs ONNX Runtime Web (WebGPU → WASM fallback) on a SwinV2 detector
   downloaded once and verified by SHA-256.
 - A **content script** discovers images and renders badges.
-- Detection = neural score + forensic metadata + spectral features, fused into a calibrated
-  probability (threshold 0.65 by default).
+- Detection = neural score + forensic metadata (C2PA/EXIF/XMP/PNG), fused into a calibrated
+  probability (threshold 0.65 by default). A 2D-FFT spectral module exists but is dormant — it
+  did not improve measured accuracy and is not part of the shipped fusion (see
+  docs/ARCHITECTURE.md).
 
 ## Accuracy
 
@@ -115,7 +117,7 @@ JPEG-recompress/resize augmentations), threshold 0.65:
 
 ```bash
 npm run dev        # watch-mode build
-npm test           # unit + integration tests (<!-- AUTO:TEST_COUNT -->431<!-- /AUTO:TEST_COUNT -->)
+npm test           # unit + integration tests (<!-- AUTO:TEST_COUNT -->439<!-- /AUTO:TEST_COUNT -->)
 npm run cover      # coverage (v8, gated)
 npm run test:e2e   # end-to-end in headless Chrome-for-Testing (7 cases)
 npm run lint       # eslint (blocks CI)

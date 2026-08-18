@@ -2,8 +2,9 @@
  * Options page: threshold, image-size/limits, badge behavior, per-site rules, model info, reset.
  * Uses shared design tokens. Every change announces success via an accessible toast + aria-live.
  */
-import { DEFAULT_SETTINGS, STORAGE_KEYS } from '../shared/constants.js';
+import { DEFAULT_SETTINGS, MSG, STORAGE_KEYS, TIMEOUTS } from '../shared/constants.js';
 import { sanitizeSettings } from '../shared/settings.js';
+import { makeRequest, sendRequest } from '../shared/protocol.js';
 
 const root = document.getElementById('options-root');
 
@@ -242,9 +243,16 @@ function modelSection(modelState) {
       )
     )
       return;
-    await chrome.runtime.sendMessage({ type: 'model-reset', payload: {} }).catch(() => {});
-    announce('Model reset — opening setup');
-    chrome.tabs.create({ url: chrome.runtime.getURL('pages/onboarding.html') });
+    try {
+      const res = await sendRequest(makeRequest(MSG.MODEL_RESET, {}), {
+        timeoutMs: TIMEOUTS.UI_QUERY_MS,
+      });
+      if (!res?.ok) throw new Error(res?.error?.message ?? 'reset failed');
+      announce('Model reset — opening setup');
+      chrome.tabs.create({ url: chrome.runtime.getURL('pages/onboarding.html') });
+    } catch (err) {
+      announce(`Reset failed: ${err?.message ?? err}`);
+    }
   });
   s.appendChild(reset);
   return s;

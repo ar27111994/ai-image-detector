@@ -37,7 +37,7 @@ async function ensureReady(payload) {
 }
 
 async function analyze(payload) {
-  const { bytes } = payload;
+  const { bytes, threshold } = payload;
   if (!(bytes instanceof ArrayBuffer) || bytes.byteLength === 0) {
     throw Object.assign(new Error('analyze requires non-empty ArrayBuffer bytes'), {
       code: 'BAD_INPUT',
@@ -49,8 +49,12 @@ async function analyze(payload) {
   // 2. Neural inference.
   const neural = await engine.analyzeImageBytes(bytes);
 
-  // 3. Fuse into a calibrated score.
-  const fused = fuseSignals({ neuralScore: neural.score, forensic });
+  // 3. Fuse into a calibrated score. The user-configurable threshold classifies the verdict;
+  //    the forensic definitive path (verified provenance) always overrides it.
+  const fused = fuseSignals(
+    { neuralScore: neural.score, forensic },
+    Number.isFinite(threshold) ? { threshold } : {},
+  );
 
   return {
     score: fused.score,

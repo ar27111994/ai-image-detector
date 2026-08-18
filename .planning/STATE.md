@@ -15,9 +15,14 @@
   design-token expansion, DRY refactors (shared math.js, model-variant.js, centralized TIMEOUTS),
   bounded IDB get, offscreen crash recovery, and unit suites for the five previously-untested
   UI/content modules. See CHANGELOG [Unreleased] and .planning/TECH-DEBT.md.
-- Verified gates: npm ci && npm run build && npm test (431 tests / 34 files) && npm run test:e2e
-  (7/7) && npm run lint && npm run format:check && npm run docs:check all pass. Coverage 98.6%
-  lines / 91.4% branches / 98.0% functions (90% gate). Docs auto-synced via tools/sync-docs.mjs.
+- Verified gates: npm ci && npm run build && npm test (439 tests / 34 files) && npm run test:e2e
+  (7/7) && npm run lint && npm run format:check && npm run docs:check all pass. Coverage 98.5%
+  lines / 91.0% branches / 98.0% functions (90% gate). Docs auto-synced via tools/sync-docs.mjs.
+- PR #1 review round 2 (14 unresolved threads): fixed threshold-not-applied (now threaded + cache
+  key includes it), options MODEL_RESET protocol bug, C2PA UUID-validation (anti-forgery), full-
+  buffer image hash, bounded getAllKeys, superseded-download generation token, dependabot auto-
+  merge (GraphQL), and doc accuracy (spectral dormant / privacy image-fetch / single int8 variant).
+  CodeQL bench/model-loader alert re-confirmed false positive (SHA-256-pinned URL).
 - PR #1 open → main; all CI + CodeQL + dependency-review gates green. CodeQL: 4 download-related
   alerts verified false positives (SHA-256-pinned) and dismissed; 2 real findings fixed (PNG iTXt
   dead store, pack.mjs TOCTOU). Conversion-toolchain pins bumped (onnx 1.21.0, pillow 12.3.0,

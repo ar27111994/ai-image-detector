@@ -21,7 +21,9 @@ acknowledge within 72 hours.
 This extension is designed around a strict local-only guarantee:
 
 - **No image data leaves the device.** All inference runs in an offscreen document via ONNX
-  Runtime Web (WASM/WebGPU). The only network call is the one-time model download at setup.
+  Runtime Web (WASM/WebGPU). The only network calls are (a) the one-time model download at setup
+  and (b) fetching an image's bytes **from its own original URL** when it is hosted cross-origin
+  (page CORS bypass) — image bytes are fetched, never uploaded.
 - **Model integrity is mandatory.** Every weight download (and every bundled copy) is verified
   against a SHA-256 hash pinned in the committed `models/manifest.json`. A spec or download
   without a valid hash is rejected before use.

@@ -38,12 +38,36 @@ into the v1.0.0 submission.
   (softmax moved to `math.js`); all timeout/byte budgets centralized in `shared/constants.js`
   (`TIMEOUTS`, `MAX_IMAGE_BYTES`); model-variant selection shared via `shared/model-variant.js`.
 - `getModelBlob` (IndexedDB) is now time-bounded like every other store op.
-- **Model-download starts are deduplicated and abandonable.** `startModelDownload` shares one
-  in-flight `ensureModel` promise, so a retry after a timed-out onboarding request no longer
-  downloads and hashes the ~311MB model twice or races `downloading`/`error`/`ready` state writes.
-  The in-flight entry is also raced against a deadline: a stalled download (a hung `fetch` stream
-  carries no abort signal) now times out and clears, so a later retry starts a fresh download
-  instead of awaiting the stuck promise until the service worker restarts.
+- **Model-download starts are deduplicated, abandonable, and supersession-safe.**
+  `startModelDownload` shares one in-flight `ensureModel` promise (no duplicate ~311MB download)
+  raced against a deadline (a stalled download times out so a retry starts fresh). Each attempt
+  carries a generation token, so a superseded (timed-out) download's late settlement can no longer
+  overwrite the retry's `ready` state or persist a stale blob.
+
+### Fixed (PR #1 review — behavior)
+
+- **User threshold now drives verdicts.** The popup/options threshold is threaded through
+  `analyzeBytes` → `OFFSCREEN_ANALYZE` → `fuseSignals`, and the analysis cache key includes it, so
+  changing the threshold actually re-classifies results (previously every verdict was computed at
+  the 0.65 default and cached under a threshold-independent key).
+- **Model reset is a real protocol request.** Options now sends `MODEL_RESET` via
+  `makeRequest`/`sendRequest` and only announces success + opens onboarding on an `ok` response —
+  previously a malformed (id-less) message was dropped by `isRequest` and the UI falsely announced
+  success while the model stayed installed.
+- **C2PA provenance requires a valid manifest UUID.** Claim markers are only scanned in
+  UUID-validated JUMBF manifests, so a crafted `caBX`/APP11/`C2PA` chunk containing a bare AI
+  marker can no longer force a definitive AI verdict on a real photo.
+- **Image cache key is collision-resistant.** `imageContentKey` now hashes the full buffer
+  (was head/middle/tail sampling), so two same-length images differing outside those windows no
+  longer share a verdict.
+- **`listModelKeys` (IndexedDB `getAllKeys`) is time-bounded** like every other store op, so a hung
+  transaction can no longer stall `isModelReady()`/setup indefinitely.
+- **Dependabot auto-merge workflow** now uses the GraphQL `enablePullRequestAutoMerge` mutation
+  (`pulls.update` has no `auto_merge` param — the old step was a silent no-op).
+- **Docs accuracy**: README/COMPETITIVE-ANALYSIS no longer claim the dormant 2D-FFT spectral module
+  is in the shipped fusion; PRIVACY/SECURITY now accurately describe the cross-origin image fetch
+  (bytes fetched from the image's own URL, never uploaded) instead of "no third-party requests";
+  ARCHITECTURE reflects the single pinned int8 variant (no separate fp16 WebGPU variant shipped).
 - **Failed WebGPU sessions are released.** When the WebGPU self-test probe rejects or times out,
   the created-but-rejected session is now `.release()`d before falling back to WASM, so a failed
   WebGPU context no longer leaks GPU/native resources.
@@ -52,15 +76,15 @@ into the v1.0.0 submission.
 
 ### Testing
 
-- **431 tests / 34 files** (was 227/24 at v1.0.0). New unit suites for the previously untested
+- **439 tests / 34 files** (was 227/24 at v1.0.0). New unit suites for the previously untested
   popup/options/onboarding pages, the offscreen orchestrator, and the service-worker router
   (sender auth, cache, stampede dedup, site-disable). Concurrency/stress suites (50-unique and
   50-identical-image stampedes verifying exactly-once inference and cache-collapse, plus
-  concurrent-download dedup and stalled-download-recovery tests), adversarial security suites
-  (prototype-pollution, hostile message envelopes, full-pipeline XSS through a hostile A1111 PNG),
-  WebGPU session-leak release tests, and edge/corrupt-input parsers. Integration dispatch harness
-  de-flaked (event-driven latch replaces fixed sleeps). Coverage gate ≥90% (98.6/91.4/98.0
-  measured).
+  concurrent-download dedup, stalled-download-recovery, and superseded-generation tests),
+  adversarial security suites (prototype-pollution, hostile message envelopes, full-pipeline XSS
+  through a hostile A1111 PNG, C2PA UUID-validation), WebGPU session-leak release tests, and
+  edge/corrupt-input parsers. Integration dispatch harness de-flaked (event-driven latch replaces
+  fixed sleeps). Coverage gate ≥90% (98.5/91.0/98.0 measured).
 
 ### Fixed (accuracy documentation)
 

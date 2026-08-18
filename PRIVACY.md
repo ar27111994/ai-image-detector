@@ -16,7 +16,9 @@ browsing history, or any personal data anywhere.
 - ❌ No telemetry, analytics, tracking, or fingerprinting.
 - ❌ No cloud inference, external API calls, or local backend processes.
 - ❌ No cookies, no accounts, no personal data collection.
-- ❌ No third-party requests after the one-time model download.
+- ❌ No data is **uploaded** anywhere, and no request is made to any party other than the image's
+  own host (see the complete network list below — analyzing a cross-origin image means fetching
+  its bytes from the URL your browser already loaded).
 
 ## Network activity (complete list)
 

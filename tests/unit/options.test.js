@@ -138,6 +138,44 @@ describe('options page ARIA hygiene', () => {
     expect(String(opened[0].url)).toContain('onboarding.html');
   });
 
+  it('sends MODEL_RESET as a well-formed protocol request (string id, payload)', async () => {
+    globalThis.__confirmReturn = true;
+    await loadOptions();
+    const root = document.getElementById('options-root');
+    const reset = collectAttributes(root).find(
+      (n) => n.tagName === 'BUTTON' && /Re-download \/ reset model/i.test(n.textContent ?? ''),
+    );
+    reset.click();
+    await new Promise((r) => setTimeout(r, 20));
+    const { isRequest } = await import('../../src/shared/protocol.js');
+    const { MSG } = await import('../../src/shared/constants.js');
+    const resetMsg = chromeStub.sentMessages.find((m) => m.type === MSG.MODEL_RESET);
+    expect(resetMsg).toBeTruthy();
+    // Regression: a bare { type, payload } (no id) fails isRequest and the SW drops it.
+    expect(isRequest(resetMsg)).toBe(true);
+  });
+
+  it('does NOT open onboarding or announce success when MODEL_RESET fails', async () => {
+    globalThis.__confirmReturn = true;
+    const opened = [];
+    chromeStub.chrome.tabs.create = async (t) => opened.push(t);
+    chromeStub.chrome.runtime.sendMessage = async () => ({
+      ok: false,
+      error: { message: 'storage gone', code: 'INTERNAL' },
+    });
+    await loadOptions();
+    const root = document.getElementById('options-root');
+    const reset = collectAttributes(root).find(
+      (n) => n.tagName === 'BUTTON' && /Re-download \/ reset model/i.test(n.textContent ?? ''),
+    );
+    reset.click();
+    await new Promise((r) => setTimeout(r, 20));
+    // Failure must not proceed to onboarding.
+    expect(opened.length).toBe(0);
+    const toast = document.getElementById('save-toast');
+    expect(String(toast?.textContent ?? '')).toMatch(/reset failed/i);
+  });
+
   it('shows the model card with status, variant, and size when ready', async () => {
     chromeStub.storage.set(STORAGE_KEYS.MODEL_STATE, {
       status: 'ready',

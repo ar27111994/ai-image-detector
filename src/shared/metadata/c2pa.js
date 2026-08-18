@@ -102,8 +102,13 @@ export function detectC2pa(buffer, format) {
   const generators = new Set();
   let sawManifest = false;
 
+  // Only trust blobs that carry the JUMBF manifest-store UUID. A crafted APP11 "JP" / PNG caBX /
+  // WebP C2PA chunk containing a known claim marker but no valid manifest UUID must NOT be
+  // treated as provenance — otherwise an attacker could plant a marker in an arbitrary chunk to
+  // force a definitive AI verdict on a real photo.
   for (const blob of blobs) {
-    if (containsBytes(blob, C2PA_UUID)) sawManifest = true;
+    if (!containsBytes(blob, C2PA_UUID)) continue;
+    sawManifest = true;
     const strings = extractStrings(blob, 6, 512).join('\n');
     const lower = strings.toLowerCase();
     for (const marker of AI_CLAIM_MARKERS) {
@@ -132,6 +137,8 @@ export function detectC2pa(buffer, format) {
   }
 
   if (sawManifest) signals.unshift('c2pa:manifest-store present');
+  // present = a UUID-validated manifest-store exists (drives the fast path); hit = it also names
+  // a known AI generator. A candidate blob with no valid UUID yields neither.
   const hit = signals.some((s) => s !== 'c2pa:manifest-store present');
-  return { present: true, hit, signals, generators: [...generators] };
+  return { present: sawManifest, hit, signals, generators: [...generators] };
 }

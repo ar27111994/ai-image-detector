@@ -240,6 +240,27 @@ describe('c2pa.detectC2pa', () => {
     expect(res.hit).toBe(true);
     expect(res.signals.join(' ')).toMatch(/c2pa\.ai\.generative|Firefly/i);
   });
+
+  it('ignores a crafted caBX chunk with an AI marker but NO valid manifest UUID', () => {
+    // Adversarial: a PNG caBX chunk that contains a known claim marker but lacks the JUMBF
+    // manifest-store UUID must NOT be treated as provenance (otherwise it forces a false
+    // definitive AI verdict on a real photo).
+    const enc = new TextEncoder();
+    const claim = enc.encode('{"claim_generator":"DALL-E 3","actions":["c2pa.ai.generative"]}');
+    const jumbf = new Uint8Array([...claim]); // NO C2PA_UUID prefix
+    const cabx = [];
+    const len = jumbf.length;
+    cabx.push((len >>> 24) & 0xff, (len >>> 16) & 0xff, (len >>> 8) & 0xff, len & 0xff);
+    cabx.push(...enc.encode('caBX'));
+    cabx.push(...jumbf);
+    cabx.push(0, 0, 0, 0);
+    const sig = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+    const iend = [0, 0, 0, 0, ...enc.encode('IEND'), 0, 0, 0, 0];
+    const png = new Uint8Array([...sig, ...cabx, ...iend]).buffer;
+    const res = detectC2pa(png, 'png');
+    expect(res.present).toBe(false); // no UUID-validated manifest
+    expect(res.hit).toBe(false); // must not become a definitive verdict
+  });
 });
 
 describe('fusion.fuseSignals', () => {

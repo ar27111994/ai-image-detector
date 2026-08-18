@@ -10,11 +10,12 @@ import { MSG } from '../../src/shared/constants.js';
 import { isResponse } from '../../src/shared/protocol.js';
 
 // Mock the heavy engine + forensic/fusion deps before importing the module under test.
+const neural = { score: 0.9 }; // tests can reassign before dispatching
 vi.mock('../../src/offscreen/inference-engine.js', () => ({
   loadSession: vi.fn(async () => ({ ep: 'wasm', variant: 'primary-int8', warmMs: 5 })),
   engineStatus: vi.fn(() => ({ initialized: true, ep: 'wasm', variant: 'primary-int8' })),
   analyzeImageBytes: vi.fn(async () => ({
-    score: 0.9,
+    score: neural.score,
     width: 256,
     height: 256,
     latencyMs: 3,
@@ -52,6 +53,7 @@ beforeEach(async () => {
   chromeStub.chrome.runtime.onMessage.addListener = (fn) => {
     listener = fn;
   };
+  neural.score = 0.9; // reset any per-test override
   vi.resetModules();
   await import('../../src/offscreen/offscreen.js');
 });
@@ -93,6 +95,30 @@ describe('offscreen orchestrator', () => {
     expect(res.result.verdict).toBeDefined();
     expect(res.result.neuralScore).toBe(0.9);
     expect(res.result.ep).toBe('wasm');
+  });
+
+  it('OFFSCREEN_ANALYZE applies the user-configurable threshold to the verdict', async () => {
+    const { CALIBRATION } = await import('../../src/shared/fusion/calibration.js');
+    const { verdictFor } = await import('../../src/shared/fusion/fuse.js');
+    const bytes = new Uint8Array([1, 2, 3, 4]).buffer;
+    // The calibration curve is recall-heavy; neural 0.1 calibrates to ~0.868, which is 'ai' at the
+    // default 0.65 but 'uncertain' at a raised 0.95 threshold — a genuinely flippable point.
+    neural.score = 0.1;
+    const calibrateScore = (n) =>
+      1 / (1 + Math.exp(-(CALIBRATION.a * Math.log(n / (1 - n)) + CALIBRATION.b)));
+    const score = calibrateScore(0.1);
+    expect(verdictFor(score, 0.65)).toBe('ai');
+    expect(verdictFor(score, 0.95)).not.toBe('ai');
+
+    const dflt = await dispatch(makeRequest(MSG.OFFSCREEN_ANALYZE, { bytes }));
+    expect(dflt.result.score).toBeCloseTo(score, 6);
+    expect(dflt.result.verdict).toBe('ai'); // default 0.65
+
+    const res = await dispatch(makeRequest(MSG.OFFSCREEN_ANALYZE, { bytes, threshold: 0.95 }));
+    expect(res.ok).toBe(true);
+    expect(res.result.score).toBeCloseTo(score, 6);
+    expect(res.result.verdict).toBe(verdictFor(score, 0.95));
+    expect(res.result.verdict).not.toBe(dflt.result.verdict); // threshold actually applied
   });
 
   it('surfaces engine errors as an error response (not a throw)', async () => {

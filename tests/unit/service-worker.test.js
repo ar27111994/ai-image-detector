@@ -14,6 +14,7 @@ vi.mock('../../src/background/model-manager.js', () => ({
   getModelState: vi.fn(async () => ({ status: 'ready', progress: 1 })),
   loadManifest: vi.fn(async () => ({ variants: [{ kind: 'wasm', key: 'primary-int8' }] })),
   ensureModel: vi.fn(async () => ({ alreadyReady: true })),
+  beginModelSetup: vi.fn(() => 1),
 }));
 
 // Model store: the SW's resetModel() imports it dynamically to clear the store.

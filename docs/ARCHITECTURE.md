@@ -28,7 +28,7 @@ download at first-run setup, all inference is offline.
 ┌──────────────────────────────────▼────────────────────────────────────────┐
 │ Offscreen document (long-lived, owns the ONNX Runtime session)            │
 │  - ONNX Runtime Web (vendored, version-locked)                            │
-│  - EP selection: WebGPU (fp16) with timed self-test -> WASM (int8/fp32)   │
+│  - EP selection: WebGPU (timed self-test) -> WASM fallback (int8 model)   │
 │  - decode (createImageBitmap) -> OffscreenCanvas RGBA -> preprocess       │
 │  - forensic layer (PNG/JPEG/XMP/C2PA/WebP byte parsers)                   │
 │  - calibrated fusion (neural + forensic) -> score + verdict               │
@@ -48,10 +48,17 @@ download at first-run setup, all inference is offline.
 
 ## Execution providers & quantization
 
-| EP              | Model variant         | Why                                   |
-| --------------- | --------------------- | ------------------------------------- |
-| WebGPU          | fp16                  | native half-precision on GPU; fastest |
-| WASM (fallback) | int8 (Conv kept fp32) | ~4x smaller, SIMD; works everywhere   |
+| EP              | Model variant         | Why                                                  |
+| --------------- | --------------------- | ---------------------------------------------------- |
+| WebGPU          | int8 (Conv kept fp32) | GPU-accelerated; runs the single pinned int8 variant |
+| WASM (fallback) | int8 (Conv kept fp32) | ~4x smaller, SIMD; works everywhere                  |
+
+> The shipped manifest declares **one** variant (`wasm`/int8), which both EPs load — `pickVariantForEp`
+> prefers a `webgpu`-kind variant when present and otherwise falls back to the shared int8 bytes. An
+> fp16 WebGPU variant was evaluated but is **not shipped**: ORT's CPU EP fails SwinV2's
+> `Loop`/`SequenceInsert` type inference after fp16 conversion, so int8 is the single validated
+> variant (see docs/MODEL.md). The manifest schema supports adding an fp16 variant later without code
+> changes.
 
 **Quantization findings (measured):** int8 dynamic quantization _corrupts_ CLIP-family models
 (activation overflow; Δp≈0.29 on probes) but is clean for the shipped SwinV2 (Δp≈0.0015). The

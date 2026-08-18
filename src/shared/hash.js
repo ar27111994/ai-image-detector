@@ -22,33 +22,22 @@ export async function sha256Hex(input) {
 }
 
 /**
- * Fast content-addressed key for an image, used for the analysis LRU cache.
- * Not cryptographic by design requirement — just a stable, collision-resistant key from
- * size + sampled bytes + a short sha of the first/last chunks.
+ * Content-addressed key for an image, used for the analysis LRU cache.
+ * Hashes the COMPLETE buffer: the cache key decides whether two images share a verdict, so it
+ * must be collision-resistant. Sampling head/middle/tail windows would give two same-length
+ * images that differ only outside those windows the same key, returning one image's verdict for
+ * the other. Inputs are already capped at MAX_IMAGE_BYTES and inference is far costlier than one
+ * SHA-256 pass, so the full hash is the correct tradeoff.
  *
  * @param {ArrayBuffer} buffer full image bytes
- * @returns {Promise<string>} cache key
+ * @returns {Promise<string>} cache key (`<byteLength>:<sha256-hex prefix>`)
  */
 export async function imageContentKey(buffer) {
   const bytes = new Uint8Array(buffer);
   const len = bytes.length;
   if (len === 0) return 'empty';
-  // Sample up to 3 windows (head, middle, tail) to keep hashing O(1) in image size.
-  const windowSize = Math.min(4096, Math.ceil(len / 3));
-  const parts = [bytes.slice(0, windowSize)];
-  if (len > windowSize) {
-    const mid = Math.floor((len - windowSize) / 2);
-    parts.push(bytes.slice(mid, mid + windowSize));
-    parts.push(bytes.slice(len - windowSize));
-  }
-  const combined = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
-  let offset = 0;
-  for (const p of parts) {
-    combined.set(p, offset);
-    offset += p.length;
-  }
-  const digest = await crypto.subtle.digest('SHA-256', combined.buffer);
-  const hex = [...new Uint8Array(digest.slice(0, 12))]
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  const hex = [...new Uint8Array(digest.slice(0, 16))]
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
   return `${len}:${hex}`;

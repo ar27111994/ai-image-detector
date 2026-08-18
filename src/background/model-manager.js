@@ -17,6 +17,30 @@ import { pickVariantForEp } from '../shared/model-variant.js';
 
 const MANIFEST_URL = 'models/manifest.json';
 
+// Monotonic generation token for model setup. The service worker wraps ensureModel in an
+// abandonable timeout: when a download stalls and times out, the underlying operation keeps
+// running in the background while a retry starts a newer generation. Stale generations must not
+// commit state/blob writes, or a superseded download's late error/ready would overwrite the
+// retry's result.
+let currentGeneration = 0;
+
+/**
+ * Begin a new setup generation; returns its token. Any prior in-flight attempt is superseded.
+ * @returns {number} the new generation token
+ */
+export function beginModelSetup() {
+  return ++currentGeneration;
+}
+
+/**
+ * True while `gen` is the latest setup generation (not superseded by a retry/reset).
+ * @param {number} gen generation token to test
+ * @returns {boolean} whether `gen` is still the current generation
+ */
+function isActive(gen) {
+  return gen === currentGeneration;
+}
+
 /**
  * Load the bundled model manifest.
  * @returns {Promise<{ variants: Array<object> }>} parsed models/manifest.json
@@ -70,9 +94,11 @@ export async function isModelReady() {
  *
  * @param {object} variantSpec manifest entry: { key, url, sha256, sizeBytes }
  * @param {(state:object) => void} [onProgress]
+ * @param {number|null} [gen] setup generation token; when set, state/blob commits are dropped
+ *   once this generation is superseded by a newer one
  * @returns {Promise<{ key: string, bytes: number, verified: boolean }>}
  */
-export async function downloadVariant(variantSpec, onProgress) {
+export async function downloadVariant(variantSpec, onProgress, gen = null) {
   const { key, url, sha256, sizeBytes } = variantSpec;
   if (!key || !url) throw new Error('variant spec missing key/url');
   // SHA-256 is mandatory: without it a tampered download would be trusted. Never proceed unsigned.
@@ -82,7 +108,21 @@ export async function downloadVariant(variantSpec, onProgress) {
     });
   }
 
-  await setModelState({
+  // Commit a state/blob write only while this attempt is still the current generation. A stale
+  // (superseded) attempt is a no-op so its late settlement can't overwrite a newer retry.
+  const commitState = async (patch) => {
+    if (gen != null && !isActive(gen)) return null; // superseded — drop the write
+    return await setModelState(patch);
+  };
+  const throwIfSuperseded = () => {
+    if (gen != null && !isActive(gen)) {
+      throw Object.assign(new Error('superseded by a newer model download'), {
+        code: 'SUPERSEDED',
+      });
+    }
+  };
+
+  await commitState({
     status: 'downloading',
     progress: 0,
     downloadedBytes: 0,
@@ -95,11 +135,11 @@ export async function downloadVariant(variantSpec, onProgress) {
   try {
     response = await fetch(url, { cache: 'no-store' });
   } catch (err) {
-    await setModelState({ status: 'error', error: `network: ${err.message}` });
+    await commitState({ status: 'error', error: `network: ${err.message}` });
     throw err;
   }
   if (!response.ok) {
-    await setModelState({ status: 'error', error: `HTTP ${response.status}` });
+    await commitState({ status: 'error', error: `HTTP ${response.status}` });
     throw new Error(`model download failed: HTTP ${response.status}`);
   }
 
@@ -116,13 +156,15 @@ export async function downloadVariant(variantSpec, onProgress) {
     const now = Date.now();
     if (now - lastReport > 250) {
       lastReport = now;
-      const state = await setModelState({
+      const state = await commitState({
         downloadedBytes: received,
         totalBytes: total,
         progress: total ? received / total : 0,
       });
-      onProgress?.(state);
-      broadcastProgress(state);
+      if (state) {
+        onProgress?.(state);
+        broadcastProgress(state);
+      }
     }
   }
 
@@ -131,13 +173,14 @@ export async function downloadVariant(variantSpec, onProgress) {
   // Integrity is mandatory (enforced above).
   const actual = await sha256Hex(blob);
   if (actual.toLowerCase() !== sha256.toLowerCase()) {
-    await setModelState({
+    await commitState({
       status: 'error',
       error: 'sha256 mismatch — aborting (possible corruption)',
     });
     throw new Error(`model integrity check failed: expected ${sha256}, got ${actual}`);
   }
 
+  throwIfSuperseded(); // don't persist a stale blob over a newer attempt
   await putModelBlob(key, blob);
   const state = await setModelState({
     status: 'ready',
@@ -196,9 +239,11 @@ export async function loadBundledVariant(variant) {
  * Full setup: prefer a bundled copy (zero download); else download once and verify.
  * @param {string} epPreference 'webgpu' | 'wasm'
  * @param {(state:object) => void} [onProgress]
+ * @param {number|null} [gen] setup generation token; when set, state/blob commits are dropped
+ *   once this generation is superseded by a newer one
  * @returns {Promise<{ alreadyReady?: boolean, key?: string, bytes?: number, bundled?: boolean, verified?: boolean }>}
  */
-export async function ensureModel(epPreference, onProgress) {
+export async function ensureModel(epPreference, onProgress, gen = null) {
   if (await isModelReady()) return { alreadyReady: true };
   const manifest = await loadManifest();
   const variant = pickVariant(manifest, epPreference);
@@ -206,6 +251,12 @@ export async function ensureModel(epPreference, onProgress) {
   // Self-contained package: load the embedded model without any network call.
   const bundled = await loadBundledVariant(variant);
   if (bundled) {
+    // A stale (superseded) attempt must not persist its blob/state over a newer one.
+    if (gen != null && !isActive(gen)) {
+      throw Object.assign(new Error('superseded by a newer model download'), {
+        code: 'SUPERSEDED',
+      });
+    }
     await putModelBlob(variant.key, bundled);
     const state = await setModelState({
       status: 'ready',
@@ -218,7 +269,7 @@ export async function ensureModel(epPreference, onProgress) {
     return { key: variant.key, bytes: bundled.size, bundled: true, verified: true };
   }
 
-  return await downloadVariant(variant, onProgress);
+  return await downloadVariant(variant, onProgress, gen);
 }
 
 /**

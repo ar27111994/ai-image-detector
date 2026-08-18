@@ -66,9 +66,8 @@ globalThis.indexedDB = {
 };
 globalThis.fetch = vi.fn((...a) => fetchImpl(...a));
 
-const { loadBundledVariant, pickVariant, downloadVariant } = await import(
-  '../../src/background/model-manager.js'
-);
+const { loadBundledVariant, pickVariant, downloadVariant, beginModelSetup, getModelState } =
+  await import('../../src/background/model-manager.js');
 const { sha256Hex } = await import('../../src/shared/hash.js');
 
 const VARIANT = {
@@ -225,6 +224,60 @@ describe('model-manager.downloadVariant full flow', () => {
       downloadVariant({ key: 'm4', url: 'https://x.test/m.onnx', sha256: 'a'.repeat(64) }),
     ).rejects.toThrow(/socket hangup/i);
     expect(store.get('model.state.v1').status).toBe('error');
+  });
+
+  it('a superseded (timed-out) attempt does not overwrite the current generation state', async () => {
+    // Attempt A starts on generation gA and stalls mid-stream; a retry supersedes it (gB) and
+    // completes to `ready`. When A's late network error then settles, it must NOT overwrite the
+    // retry's ready state.
+    const bytes = new Uint8Array([7, 7, 7, 7]);
+    const sha = await sha256Hex(bytes.buffer);
+    const variant = { key: 'm-gen', url: 'https://x.test/m.onnx', sha256: sha, sizeBytes: 4 };
+
+    // Attempt A: a fetch stream that delivers one chunk then hangs forever (stalled connection).
+    let releaseA;
+    fetchImpl = async () => ({
+      ok: true,
+      headers: { get: () => String(bytes.length) },
+      body: {
+        getReader: () => {
+          let delivered = false;
+          return {
+            read: () => {
+              if (!delivered) {
+                delivered = true;
+                return Promise.resolve({ done: false, value: bytes.slice(0, 2) });
+              }
+              return new Promise((resolve, reject) => {
+                releaseA = () => reject(new Error('late network failure'));
+              });
+            },
+          };
+        },
+      },
+    });
+
+    const gA = beginModelSetup();
+    const attemptA = downloadVariant(variant, undefined, gA);
+    // Let A reach the stalled read, then supersede it with a newer generation.
+    await new Promise((r) => setTimeout(r, 20));
+    const gB = beginModelSetup();
+    expect(gB).toBeGreaterThan(gA);
+
+    // A's late settlement arrives after supersession: it must be swallowed (no error commit).
+    releaseA();
+    await expect(attemptA).rejects.toThrow(/late network failure/i);
+    // The recorded state must NOT be A's error — the superseded attempt's commit was dropped.
+    const state = await getModelState();
+    expect(state.status).not.toBe('error');
+  });
+
+  it('beginModelSetup increments a monotonic generation token', () => {
+    const a = beginModelSetup();
+    const b = beginModelSetup();
+    const c = beginModelSetup();
+    expect(b).toBe(a + 1);
+    expect(c).toBe(b + 1);
   });
 });
 

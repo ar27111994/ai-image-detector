@@ -18,8 +18,12 @@
 - [x] Post-release audit + hardening (2026-08-16): 32 findings fixed — accuracy docs corrected to
       the shipped numbers (84.2% raw / 83.0% augmented), NOTICE added (REQ-21), CodeQL + release
       gates + checksums, WCAG/accessibility fixes, design-token expansion, DRY refactors, offscreen
-      crash recovery, and unit tests for all previously-untested modules (431 tests / 34 files).
-- [x] PR #1 review fixes (2026-08-17): concurrent-download dedup (abandonable — a stalled download
-      times out so a retry starts fresh) + WebGPU session-leak release (both with regression
-      tests); CodeQL hygiene (PNG iTXt dead store, pack.mjs TOCTOU); conversion-toolchain pins
-      bumped (onnx 1.21.0, pillow 12.3.0, transformers 5.5.0) to clear the dependency-review gate.
+      crash recovery, and unit tests for all previously-untested modules (439 tests / 34 files).
+- [x] PR #1 review fixes (2026-08-17): concurrent-download dedup (abandonable + supersession-safe
+      via generation token) + WebGPU session-leak release; CodeQL hygiene (PNG iTXt dead store,
+      pack.mjs TOCTOU); conversion-toolchain pins bumped (onnx 1.21.0, pillow 12.3.0,
+      transformers 5.5.0).
+- [x] PR #1 review round 2 (2026-08-18): threshold threaded to verdicts (+ cache-key), options
+      MODEL_RESET protocol fix, C2PA UUID-validation (anti-forgery), full-buffer image hash,
+      bounded getAllKeys, dependabot auto-merge via GraphQL, and doc accuracy (spectral dormant,
+      privacy image-fetch, single int8 variant). CodeQL model-loader alert dismissed as FP.
