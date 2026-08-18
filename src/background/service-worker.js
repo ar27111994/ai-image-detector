@@ -313,6 +313,13 @@ async function analyzeByUrl(payload, sender) {
 
 async function analyzeByBytes(payload, sender) {
   const { bytes, minSize } = payload ?? {};
+  // Enforce the per-site disable rule on the byte-relay path too: content scripts still discover
+  // data:/blob: images on a disabled page and route them here, so they must be skipped like
+  // URL-backed images.
+  const host = sender?.url ? safeHostname(sender.url) : null;
+  if (host && !(await isSiteEnabled(host))) {
+    return { skipped: true, reason: 'site-disabled' };
+  }
   const buffer = normalizeBytes(bytes);
   if (!buffer) throw Object.assign(new Error('bytes required'), { code: 'BAD_INPUT' });
   const settings = await loadSettings();

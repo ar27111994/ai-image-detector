@@ -172,6 +172,23 @@ describe('service-worker router', () => {
     expect(offscreenCalls).toBe(0);
   });
 
+  it('skips the byte-relay path (ANALYZE_IMAGE_BYTES) on a disabled site', async () => {
+    // Regression: data:/blob: images on a disabled page are routed here by the content script and
+    // must be skipped like URL-backed images (the per-site rule must apply before byte handling).
+    await dispatch(
+      req(MSG.SET_SITE_ENABLED, { hostname: 'site.example', enabled: false }),
+      pageSender,
+    );
+    const res = await dispatch(
+      req(MSG.ANALYZE_IMAGE_BYTES, { bytes: fakeImageBytes() }),
+      pageSender,
+    );
+    expect(res.ok).toBe(true);
+    expect(res.result.skipped).toBe(true);
+    expect(res.result.reason).toBe('site-disabled');
+    expect(offscreenCalls).toBe(0);
+  });
+
   it('recovers when the offscreen document fails once (recreate + retry)', async () => {
     // First ENSURE_READY fails (simulating a crashed offscreen doc); the SW should recreate
     // the document and retry, succeeding on the second attempt.
@@ -288,9 +305,12 @@ describe('service-worker router', () => {
 
   it('rejects an oversized { data: number[] } payload by length before copying', async () => {
     const { MAX_IMAGE_BYTES } = await import('../../src/shared/constants.js');
-    // A real array just over the cap: length is checked before any element copy.
+    // normalizeBytes reads `.length` before copying any element, so a sparse array (no elements
+    // materialized) crosses the cap without allocating hundreds of MB — keeps this test fast under
+    // full-suite load.
+    const sparse = new Array(MAX_IMAGE_BYTES + 1); // length set, elements empty (holes)
     const res = await dispatch(
-      req(MSG.ANALYZE_IMAGE_BYTES, { bytes: { data: new Array(MAX_IMAGE_BYTES + 1).fill(0) } }),
+      req(MSG.ANALYZE_IMAGE_BYTES, { bytes: { data: sparse } }),
       pageSender,
     );
     expect(res.ok).toBe(false);

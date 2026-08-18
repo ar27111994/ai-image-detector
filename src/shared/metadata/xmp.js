@@ -69,13 +69,17 @@ export function detectXmpAiSignatures(packets) {
     // inside a DigitalSourceType container). A bare occurrence in an unrelated description/comment
     // must not force a definitive AI verdict.
     for (const dst of AI_DIGITAL_SOURCE_TYPES) {
-      // Attribute form: DigitalSourceType="…<value-or-cv-uri>…" (accepts the bare value or the
-      // full controlled-vocabulary URI as the attribute value).
-      const attrRe = new RegExp(`DigitalSourceType\\s*=\\s*"[^"]*${dst}`, 'i');
-      // Container form: an rdf:li inside a DigitalSourceType element, holding the bare value or
-      // the controlled-vocabulary URI.
+      // Attribute form: an EXACT `…:DigitalSourceType="…"` or unqualified `DigitalSourceType="…"`
+      // (a name that merely ENDS in DigitalSourceType, e.g. ex:NotDigitalSourceType, must not match).
+      // `(?:^|[\s<])` anchors the property name so a longer qualified name can't suffix-match.
+      const attrRe = new RegExp(
+        `(?:^|[\\s<])(?:[A-Za-z0-9]+:)?DigitalSourceType\\s*=\\s*"[^"]*${dst}`,
+        'i',
+      );
+      // Container form: an rdf:li inside an exact DigitalSourceType element, holding the bare value
+      // or the controlled-vocabulary URI.
       const liRe = new RegExp(
-        `<[^>]*DigitalSourceType[^>]*>[\\s\\S]*?<rdf:li>[^<]*${dst}[^<]*<\\/rdf:li>`,
+        `<(?:[A-Za-z0-9]+:)?DigitalSourceType[^>]*>[\\s\\S]*?<rdf:li>[^<]*${dst}[^<]*<\\/rdf:li>`,
         'i',
       );
       if (attrRe.test(xml) || liRe.test(xml)) {

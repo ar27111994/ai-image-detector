@@ -25,8 +25,23 @@ const AI_SOFTWARE_TAGS = [
   'fooocus',
 ];
 
-/** A1111 geninfo fingerprint inside EXIF UserComment. */
-const A1111_RE = /(Steps|Sampler|CFG scale|Seed|Model hash)\s*:/i;
+/** A1111 geninfo field labels that may appear inside EXIF UserComment. */
+const A1111_FIELDS = ['Steps', 'Sampler', 'CFG scale', 'Seed', 'Model hash'];
+
+/**
+ * A1111 geninfo fingerprint: requires a structured COMBINATION of fields, not any one label.
+ * A single generic token like "Steps: walk to the viewpoint" is an ordinary comment, not geninfo;
+ * a genuine A1111 block carries Steps + Sampler + (CFG scale|Seed|Model hash).
+ * @param {string} text decoded UserComment text
+ * @returns {boolean} true when at least 3 distinct A1111 fields are present
+ */
+export function isA1111Geninfo(text) {
+  let found = 0;
+  for (const f of A1111_FIELDS) {
+    if (new RegExp(`${f}\\s*:`, 'i').test(text)) found++;
+  }
+  return found >= 3;
+}
 
 const CAMERA_FIELDS = [
   'Make',
@@ -111,7 +126,7 @@ export async function analyzeExif(buffer, format) {
         uc instanceof Uint8Array ? uc : Uint8Array.from(uc),
       );
     }
-    if (text && A1111_RE.test(text)) {
+    if (text && isA1111Geninfo(text)) {
       aiSignals.push('exif: UserComment contains A1111 generation parameters');
     }
   }

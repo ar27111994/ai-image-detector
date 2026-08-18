@@ -141,13 +141,22 @@ into the v1.0.0 submission.
   the IPTC controlled-vocabulary URI) — a bare occurrence in an unrelated description/comment no
   longer forces a 0.99 verdict. The controlled-vocabulary URI is itself scoped to a DigitalSourceType
   attribute/container, so the full URI appearing only in `dc:description` text is not a claim.
+- **XMP DigitalSourceType matching requires the exact property name.** The matchers are anchored so a
+  foreign property that merely _ends_ in `DigitalSourceType` (e.g. `ex:NotDigitalSourceType`) no
+  longer produces a definitive AI signal.
+- **EXIF A1111 geninfo requires a structured combination.** A genuine block carries ≥3 distinct fields
+  (Steps + Sampler + CFG scale/Seed/Model hash); a single generic token like "Steps: walk to the
+  viewpoint" is an ordinary comment, not geninfo.
+- **The byte-relay path enforces the per-site disable rule.** `analyzeByBytes` now applies the same
+  sender-host `isSiteEnabled` check as the URL path, so `data:`/`blob:` images on a disabled page are
+  skipped instead of analyzed.
 - **`convert_ateeqq.py` reads the image size from `config.vision_config.image_size`** (SigLIP stores
   it on the vision sub-config, not the top level), normalizes tuple/list sizes, and still interpolates
   positional embeddings on export + validation for non-configured sizes.
 
 ### Testing
 
-- **469 tests / 35 files** (was 227/24 at v1.0.0). New unit suites for the previously untested
+- **<!-- AUTO:TEST_COUNT -->476<!-- /AUTO:TEST_COUNT --> tests / <!-- AUTO:TEST_FILES -->35<!-- /AUTO:TEST_FILES --> files** (was 227/24 at v1.0.0). New unit suites for the previously untested
   popup/options/onboarding pages, the offscreen orchestrator, the service-worker router, and the
   manifest verifier (`tools/verify-manifest.mjs`). Concurrency/stress suites (50-unique and
   50-identical-image stampedes verifying exactly-once inference and cache-collapse, plus

@@ -193,6 +193,15 @@ async function docFiles() {
   } catch {
     /* no docs dir */
   }
+  // Planning artifacts (.planning/) may carry markers too (e.g. STATE.md test counts).
+  const planningDir = path.join(repoRoot, '.planning');
+  try {
+    for (const f of await readdir(planningDir)) {
+      if (f.endsWith('.md')) out.push(path.join('.planning', f));
+    }
+  } catch {
+    /* no .planning dir */
+  }
   return out;
 }
 

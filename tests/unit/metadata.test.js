@@ -177,6 +177,27 @@ describe('xmp.detectXmpAiSignatures', () => {
     expect(hit).toBe(true);
   });
 
+  it('does NOT match a foreign property that merely ENDS in DigitalSourceType (attribute form)', () => {
+    const { hit } = detectXmpAiSignatures([
+      '<x:xmpmeta><rdf:Description ex:NotDigitalSourceType="trainedAlgorithmicMedia"/></x:xmpmeta>',
+    ]);
+    expect(hit).toBe(false);
+  });
+
+  it('does NOT match a foreign element named *NotDigitalSourceType* (container form)', () => {
+    const { hit } = detectXmpAiSignatures([
+      '<x:xmpmeta><ex:NotDigitalSourceType><rdf:Seq><rdf:li>trainedAlgorithmicMedia</rdf:li></rdf:Seq></ex:NotDigitalSourceType></x:xmpmeta>',
+    ]);
+    expect(hit).toBe(false);
+  });
+
+  it('still matches the exact unqualified DigitalSourceType name', () => {
+    const { hit } = detectXmpAiSignatures([
+      '<x:xmpmeta><rdf:Description DigitalSourceType="trainedAlgorithmicMedia"/></x:xmpmeta>',
+    ]);
+    expect(hit).toBe(true);
+  });
+
   it('does NOT treat the controlled-vocabulary URI in a random description as a DigitalSourceType claim', () => {
     // Adversarial: the full IPTC URI appears only in dc:description text, with no DigitalSourceType
     // property — must not force a definitive AI verdict even though it names the CV term.

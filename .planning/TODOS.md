@@ -18,7 +18,7 @@
 - [x] Post-release audit + hardening (2026-08-16): 32 findings fixed — accuracy docs corrected to
       the shipped numbers (84.2% raw / 83.0% augmented), NOTICE added (REQ-21), CodeQL + release
       gates + checksums, WCAG/accessibility fixes, design-token expansion, DRY refactors, offscreen
-      crash recovery, and unit tests for all previously-untested modules (460 tests / 35 files).
+      crash recovery, and unit tests for all previously-untested modules (<!-- AUTO:TEST_COUNT -->476<!-- /AUTO:TEST_COUNT --> tests / <!-- AUTO:TEST_FILES -->35<!-- /AUTO:TEST_FILES --> files).
 - [x] PR #1 review fixes (2026-08-17): concurrent-download dedup (abandonable + supersession-safe
       via generation token) + WebGPU session-leak release; CodeQL hygiene (PNG iTXt dead store,
       pack.mjs TOCTOU); conversion-toolchain pins bumped (onnx 1.21.0, pillow 12.3.0,
@@ -54,3 +54,7 @@
       property (a bare URI in dc:description no longer forces a verdict); convert_ateeqq.py reads
       image size from config.vision_config.image_size (SigLIP vision sub-config) with tuple/list
       normalization.
+- [x] PR #1 review round 10 (2026-08-18): XMP DigitalSourceType matchers anchored to the exact
+      property name (a foreign `ex:NotDigitalSourceType` no longer hits); EXIF A1111 geninfo requires
+      ≥3 distinct fields (a lone "Steps:"/"Seed:" token is not geninfo); the byte-relay path now
+      enforces the per-site disable rule.

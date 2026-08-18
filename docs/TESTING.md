@@ -13,7 +13,7 @@
 
 ## Test counts
 
-<!-- AUTO:TEST_COUNT -->469<!-- /AUTO:TEST_COUNT --> tests across <!-- AUTO:TEST_FILES -->35<!-- /AUTO:TEST_FILES --> files (unit + integration), plus 7 e2e cases in real Chrome.
+<!-- AUTO:TEST_COUNT -->476<!-- /AUTO:TEST_COUNT --> tests across <!-- AUTO:TEST_FILES -->35<!-- /AUTO:TEST_FILES --> files (unit + integration), plus 7 e2e cases in real Chrome.
 
 > Test counts, coverage %, and benchmark accuracy in the docs are auto-synced from the source of
 > truth via `npm run docs:sync` (see CONTRIBUTING.md). The `test` CI job fails if they drift

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { analyzeExif } from '../../src/shared/metadata/exif.js';
+import { analyzeExif, isA1111Geninfo } from '../../src/shared/metadata/exif.js';
 
 // Build a minimal JPEG APP1 EXIF segment with one ASCII tag (default Software 0x0131).
 function jpegWithExifTag(text, tagId = 0x0131) {
@@ -143,5 +143,24 @@ describe('exif.analyzeExif', () => {
     const out = await analyzeExif(jpeg, 'jpeg');
     expect(out).toBeTruthy();
     expect(typeof out.software === 'string' || out.software === null).toBe(true);
+  });
+});
+
+describe('exif.isA1111Geninfo (structured A1111 fingerprint)', () => {
+  it('does NOT flag a single generic token in a comment', () => {
+    // Regression: any ONE label (e.g. "Steps:") is an ordinary comment, not A1111 geninfo.
+    expect(isA1111Geninfo('Steps: walk to the viewpoint')).toBe(false);
+    expect(isA1111Geninfo('Seed: 12345')).toBe(false);
+  });
+
+  it('flags a genuine A1111 geninfo block (Steps + Sampler + CFG scale + Seed)', () => {
+    const geninfo =
+      'a cat\nSteps: 20, Sampler: Euler a, CFG scale: 7, Seed: 1234, Model hash: abc123';
+    expect(isA1111Geninfo(geninfo)).toBe(true);
+  });
+
+  it('requires at least 3 distinct fields (2 is not enough)', () => {
+    expect(isA1111Geninfo('Steps: 20, Sampler: Euler a')).toBe(false);
+    expect(isA1111Geninfo('Steps: 20, Sampler: Euler a, CFG scale: 7')).toBe(true);
   });
 });
