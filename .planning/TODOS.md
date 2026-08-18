@@ -18,7 +18,7 @@
 - [x] Post-release audit + hardening (2026-08-16): 32 findings fixed — accuracy docs corrected to
       the shipped numbers (84.2% raw / 83.0% augmented), NOTICE added (REQ-21), CodeQL + release
       gates + checksums, WCAG/accessibility fixes, design-token expansion, DRY refactors, offscreen
-      crash recovery, and unit tests for all previously-untested modules (439 tests / 34 files).
+      crash recovery, and unit tests for all previously-untested modules (460 tests / 35 files).
 - [x] PR #1 review fixes (2026-08-17): concurrent-download dedup (abandonable + supersession-safe
       via generation token) + WebGPU session-leak release; CodeQL hygiene (PNG iTXt dead store,
       pack.mjs TOCTOU); conversion-toolchain pins bumped (onnx 1.21.0, pillow 12.3.0,

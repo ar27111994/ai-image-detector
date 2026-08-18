@@ -77,6 +77,15 @@ entry is abandonable: it is raced against `TIMEOUTS.MODEL_DOWNLOAD_MS`, so a sta
 rejects and clears, letting a later retry start a fresh download rather than block until the
 service worker restarts.
 
+**Model-lifecycle concurrency (reset vs. download).** All model-state mutations — download
+progress/`ready`/`error` commits and reset — are serialized through one write queue
+(`enqueueModelWrite`), so a reset's clear+`missing` can never interleave with a superseded
+download's commit. Each setup attempt carries a generation token; a superseded attempt drops its
+state commits and deletes the blob it just persisted, and the SW clears its download dedup handle
+only when it still owns it. The generation token is in-memory (per service-worker instance), so it
+governs concurrency within a live SW; across a full SW restart there is no in-flight download to
+race (the persisted state is the single source of truth).
+
 ## Robustness techniques
 
 - **Single-view full-frame inference** (default): the SwinV2 model keys on global generation
