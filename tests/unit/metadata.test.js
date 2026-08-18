@@ -122,14 +122,16 @@ describe('png-text.detectPngAiSignatures', () => {
 describe('xmp.detectXmpAiSignatures', () => {
   it('flags trainedAlgorithmicMedia DigitalSourceType', () => {
     const packets = [
-      '<x:xmpmeta><Iptc4xmpCore:DigitalSourceType><rdf:Seq><rdf:li>http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia</rdf:li></rdf:Seq></Iptc4xmpCore:DigitalSourceType></x:xmpmeta>',
+      '<x:xmpmeta xmlns:Iptc4xmpCore="http://iptc.org/std/Iptc4xmpCore/1.0/xmlns/"><Iptc4xmpCore:DigitalSourceType><rdf:Seq><rdf:li>http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia</rdf:li></rdf:Seq></Iptc4xmpCore:DigitalSourceType></x:xmpmeta>',
     ];
     const { hit, digitalSourceType } = detectXmpAiSignatures(packets);
     expect(hit).toBe(true);
     expect(digitalSourceType).toBe('trainedAlgorithmicMedia');
   });
   it('flags known AI creator tools', () => {
-    const { hit } = detectXmpAiSignatures(['<rdf:li xmp:CreatorTool="Midjourney"/>']);
+    const { hit } = detectXmpAiSignatures([
+      '<rdf:li xmlns:xmp="http://ns.adobe.com/xap/1.0/" xmp:CreatorTool="Midjourney"/>',
+    ]);
     expect(hit).toBe(true);
   });
   it('ignores plain camera XMP', () => {
@@ -139,16 +141,15 @@ describe('xmp.detectXmpAiSignatures', () => {
     expect(hit).toBe(false);
   });
   it('flags a known AI creator tool in the rdf:li element form', () => {
-    // The detector lowercases the packet; the rdf:li branch matches <xmp:creatortool> form.
     const { hit, signals } = detectXmpAiSignatures([
-      '<xmp:creatortool><rdf:li>Stable Diffusion</rdf:li></xmp:creatortool>',
+      '<xmp:CreatorTool xmlns:xmp="http://ns.adobe.com/xap/1.0/"><rdf:li>Stable Diffusion</rdf:li></xmp:CreatorTool>',
     ]);
     expect(hit).toBe(true);
     expect(signals.join(' ')).toMatch(/CreatorTool/i);
   });
   it('does not flag an rdf:li creator tool that is not an AI generator', () => {
     const { hit } = detectXmpAiSignatures([
-      '<xmp:creatortool><rdf:li>Canon EOS Utility</rdf:li></xmp:creatortool>',
+      '<xmp:CreatorTool xmlns:xmp="http://ns.adobe.com/xap/1.0/"><rdf:li>Canon EOS Utility</rdf:li></xmp:CreatorTool>',
     ]);
     expect(hit).toBe(false);
   });
@@ -164,7 +165,7 @@ describe('xmp.detectXmpAiSignatures', () => {
 
   it('flags trainedAlgorithmicMedia as a DigitalSourceType attribute', () => {
     const { hit, digitalSourceType } = detectXmpAiSignatures([
-      '<x:xmpmeta><rdf:Description Iptc4xmpCore:DigitalSourceType="trainedAlgorithmicMedia"/></x:xmpmeta>',
+      '<x:xmpmeta xmlns:Iptc4xmpCore="http://iptc.org/std/Iptc4xmpCore/1.0/xmlns/"><rdf:Description Iptc4xmpCore:DigitalSourceType="trainedAlgorithmicMedia"/></x:xmpmeta>',
     ]);
     expect(hit).toBe(true);
     expect(digitalSourceType).toBe('trainedAlgorithmicMedia');
@@ -172,7 +173,7 @@ describe('xmp.detectXmpAiSignatures', () => {
 
   it('flags trainedAlgorithmicMedia inside a DigitalSourceType rdf:li container', () => {
     const { hit } = detectXmpAiSignatures([
-      '<x:xmpmeta><Iptc4xmpCore:DigitalSourceType><rdf:Seq><rdf:li>trainedAlgorithmicMedia</rdf:li></rdf:Seq></Iptc4xmpCore:DigitalSourceType></x:xmpmeta>',
+      '<x:xmpmeta xmlns:Iptc4xmpCore="http://iptc.org/std/Iptc4xmpCore/1.0/xmlns/"><Iptc4xmpCore:DigitalSourceType><rdf:Seq><rdf:li>trainedAlgorithmicMedia</rdf:li></rdf:Seq></Iptc4xmpCore:DigitalSourceType></x:xmpmeta>',
     ]);
     expect(hit).toBe(true);
   });
@@ -221,16 +222,36 @@ describe('xmp.detectXmpAiSignatures', () => {
 
   it('rejects a substring value (nottrainedAlgorithmicMedia is not the CV value)', () => {
     const { hit } = detectXmpAiSignatures([
-      '<x:xmpmeta><rdf:Description Iptc4xmpCore:DigitalSourceType="nottrainedAlgorithmicMedia"/></x:xmpmeta>',
+      '<x:xmpmeta xmlns:Iptc4xmpCore="http://iptc.org/std/Iptc4xmpCore/1.0/xmlns/"><rdf:Description Iptc4xmpCore:DigitalSourceType="nottrainedAlgorithmicMedia"/></x:xmpmeta>',
     ]);
     expect(hit).toBe(false);
   });
 
   it('accepts the exact controlled-vocabulary URI as the property value', () => {
     const { hit } = detectXmpAiSignatures([
-      '<x:xmpmeta><rdf:Description Iptc4xmpCore:DigitalSourceType="http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia"/></x:xmpmeta>',
+      '<x:xmpmeta xmlns:Iptc4xmpCore="http://iptc.org/std/Iptc4xmpCore/1.0/xmlns/"><rdf:Description Iptc4xmpCore:DigitalSourceType="http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia"/></x:xmpmeta>',
     ]);
     expect(hit).toBe(true);
+  });
+
+  it('rejects the IPTC prefix when it is rebound to a foreign namespace URI', () => {
+    // Adversarial: the property is named Iptc4xmpCore:DigitalSourceType, but xmlns:Iptc4xmpCore is
+    // bound to an unrelated URI — the prefix does not resolve to the canonical IPTC namespace.
+    const { hit } = detectXmpAiSignatures([
+      '<x:xmpmeta xmlns:Iptc4xmpCore="http://evil.example/not-iptc"><rdf:Description Iptc4xmpCore:DigitalSourceType="trainedAlgorithmicMedia"/></x:xmpmeta>',
+    ]);
+    expect(hit).toBe(false);
+  });
+
+  it('rejects a foreign/longer CreatorTool property (ex:CreatorTool, ex:NotCreatorTool)', () => {
+    const { hit: foreign } = detectXmpAiSignatures([
+      '<rdf:li xmlns:ex="http://ex.example/" ex:CreatorTool="Midjourney"/>',
+    ]);
+    expect(foreign).toBe(false);
+    const { hit: longer } = detectXmpAiSignatures([
+      '<x:xmpmeta><rdf:Description ex:NotCreatorTool="Midjourney"/></x:xmpmeta>',
+    ]);
+    expect(longer).toBe(false);
   });
 });
 

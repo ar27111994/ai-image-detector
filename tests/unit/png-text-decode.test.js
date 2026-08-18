@@ -117,7 +117,7 @@ describe('png-text extractPngText decode paths', () => {
 describe('xmp extractXmpPackets', () => {
   it('extracts XMP from a JPEG APP1 segment', () => {
     const xmp =
-      '<x:xmpmeta><rdf:Description Iptc4xmpCore:DigitalSourceType="trainedAlgorithmicMedia"/></x:xmpmeta>';
+      '<x:xmpmeta xmlns:Iptc4xmpCore="http://iptc.org/std/Iptc4xmpCore/1.0/xmlns/"><rdf:Description Iptc4xmpCore:DigitalSourceType="trainedAlgorithmicMedia"/></x:xmpmeta>';
     const payload = new Uint8Array([
       ...enc.encode('http://ns.adobe.com/xap/1.0/'),
       0,
@@ -142,7 +142,9 @@ describe('xmp extractXmpPackets', () => {
   });
 
   it('extracts XMP from a WebP XMP chunk', () => {
-    const xmp = enc.encode('<x>xmp:CreatorTool="Midjourney"</x>');
+    const xmp = enc.encode(
+      '<x xmlns:xmp="http://ns.adobe.com/xap/1.0/" xmp:CreatorTool="Midjourney"></x>',
+    );
     const chunk = [...enc.encode('XMP '), xmp.length & 0xff, 0, 0, 0, ...xmp];
     if (xmp.length % 2) chunk.push(0); // padding
     const webp = new Uint8Array([

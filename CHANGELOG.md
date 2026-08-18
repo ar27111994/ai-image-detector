@@ -146,6 +146,10 @@ into the v1.0.0 submission.
   longer produces a definitive AI signal. The value is now extracted structurally and compared
   exactly (bare value or its controlled-vocabulary URI): a foreign namespace (`ex:DigitalSourceType`)
   is not the IPTC property, and a substring like `nottrainedAlgorithmicMedia` is rejected.
+- **XMP namespace prefixes are resolved against their `xmlns:` bindings.** A property only counts as
+  the IPTC `DigitalSourceType` (or XMP `CreatorTool`) when its prefix resolves to the canonical
+  namespace URI — a packet that rebinds `Iptc4xmpCore`/`xmp` to a foreign URI, or uses a foreign
+  prefix (`ex:DigitalSourceType`, `ex:CreatorTool`), yields no definitive signal.
 - **EXIF A1111 geninfo requires a structured combination.** A genuine block carries ≥3 distinct fields
   (Steps + Sampler + CFG scale/Seed/Model hash); a single generic token like "Steps: walk to the
   viewpoint" is an ordinary comment, not geninfo.
@@ -158,7 +162,7 @@ into the v1.0.0 submission.
 
 ### Testing
 
-- **476 tests / 35 files** (was 227/24 at v1.0.0). New unit suites for the previously untested
+- **481 tests / 35 files** (was 227/24 at v1.0.0). New unit suites for the previously untested
   popup/options/onboarding pages, the offscreen orchestrator, the service-worker router, and the
   manifest verifier (`tools/verify-manifest.mjs`). Concurrency/stress suites (50-unique and
   50-identical-image stampedes verifying exactly-once inference and cache-collapse, plus

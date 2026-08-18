@@ -58,7 +58,7 @@ describe('forensic-extractor', () => {
   it('detects XMP DigitalSourceType in a JPEG as definitive', async () => {
     const enc = new TextEncoder();
     const xmp =
-      '<x:xmpmeta><Iptc4xmpCore:DigitalSourceType><rdf:Seq><rdf:li>http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia</rdf:li></rdf:Seq></Iptc4xmpCore:DigitalSourceType></x:xmpmeta>';
+      '<x:xmpmeta xmlns:Iptc4xmpCore="http://iptc.org/std/Iptc4xmpCore/1.0/xmlns/"><Iptc4xmpCore:DigitalSourceType><rdf:Seq><rdf:li>http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia</rdf:li></rdf:Seq></Iptc4xmpCore:DigitalSourceType></x:xmpmeta>';
     const payload = new Uint8Array([
       ...enc.encode('http://ns.adobe.com/xap/1.0/'),
       0,

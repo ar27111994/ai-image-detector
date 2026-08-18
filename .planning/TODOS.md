@@ -18,7 +18,7 @@
 - [x] Post-release audit + hardening (2026-08-16): 32 findings fixed — accuracy docs corrected to
       the shipped numbers (84.2% raw / 83.0% augmented), NOTICE added (REQ-21), CodeQL + release
       gates + checksums, WCAG/accessibility fixes, design-token expansion, DRY refactors, offscreen
-      crash recovery, and unit tests for all previously-untested modules (<!-- AUTO:TEST_COUNT -->479<!-- /AUTO:TEST_COUNT --> tests / <!-- AUTO:TEST_FILES -->35<!-- /AUTO:TEST_FILES --> files).
+      crash recovery, and unit tests for all previously-untested modules (<!-- AUTO:TEST_COUNT -->481<!-- /AUTO:TEST_COUNT --> tests / <!-- AUTO:TEST_FILES -->35<!-- /AUTO:TEST_FILES --> files).
 - [x] PR #1 review fixes (2026-08-17): concurrent-download dedup (abandonable + supersession-safe
       via generation token) + WebGPU session-leak release; CodeQL hygiene (PNG iTXt dead store,
       pack.mjs TOCTOU); conversion-toolchain pins bumped (onnx 1.21.0, pillow 12.3.0,
@@ -58,3 +58,7 @@
       property name (a foreign `ex:NotDigitalSourceType` no longer hits); EXIF A1111 geninfo requires
       ≥3 distinct fields (a lone "Steps:"/"Seed:" token is not geninfo); the byte-relay path now
       enforces the per-site disable rule.
+- [x] PR #1 review round 11/12 (2026-08-18): XMP DigitalSourceType/CreatorTool now resolve their
+      namespace prefix against the `xmlns:` binding (canonical IPTC/XMP URI required) and compare the
+      value exactly — foreign-namespace, rebound-prefix, and substring-value cases yield no definitive
+      signal.

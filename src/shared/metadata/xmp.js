@@ -12,12 +12,9 @@ const XMP_JPEG_PREFIX = 'http://ns.adobe.com/xap/1.0/';
 /** IPTC DigitalSourceType values that indicate generative-AI content. */
 const AI_DIGITAL_SOURCE_TYPES = ['trainedAlgorithmicMedia', 'compositeWithTrainedAlgorithmicMedia'];
 
-/**
- * IPTC namespace prefix for the DigitalSourceType property. Only `Iptc4xmpCore:` (the canonical
- * IPTC Photo Metadata namespace) or the intentionally-supported unqualified `DigitalSourceType`
- * are accepted — a foreign namespace (e.g. `ex:DigitalSourceType`) is NOT the IPTC property.
- */
-const DST_PROPERTY = '(?:Iptc4xmpCore:)?DigitalSourceType';
+/** Canonical namespace URIs. A prefix is only trusted when it resolves to one of these. */
+const IPTC_NS = 'http://iptc.org/std/Iptc4xmpCore/1.0/xmlns/';
+const XMP_NS = 'http://ns.adobe.com/xap/1.0/';
 
 /**
  * The full controlled-vocabulary URI for a DigitalSourceType value, used to accept the CV-URI form
@@ -26,6 +23,31 @@ const DST_PROPERTY = '(?:Iptc4xmpCore:)?DigitalSourceType';
  * @returns {string} the controlled-vocabulary URI for the value
  */
 const CV_URI = (dst) => `http://cv.iptc.org/newscodes/digitalsourcetype/${dst}`;
+
+/**
+ * Resolve the `xmlns:prefix` bindings declared in an XMP packet.
+ * @param {string} xml the XMP packet
+ * @returns {Map<string,string>} prefix -> namespace URI
+ */
+function xmlnsMap(xml) {
+  const map = new Map();
+  for (const m of xml.matchAll(/xmlns:([A-Za-z0-9]+)\s*=\s*"([^"]+)"/g)) {
+    map.set(m[1], m[2]);
+  }
+  return map;
+}
+
+/**
+ * True when `prefix` resolves to `namespaceUri` in this packet (or the property is unqualified).
+ * @param {Map<string,string>} ns prefix -> URI bindings
+ * @param {string|null} prefix the property's namespace prefix (null when unqualified)
+ * @param {string} namespaceUri the canonical namespace URI to require
+ * @returns {boolean}
+ */
+function prefixResolvesTo(ns, prefix, namespaceUri) {
+  if (prefix == null) return true; // intentionally-supported unqualified form
+  return ns.get(prefix) === namespaceUri;
+}
 
 /**
  * True when `value` is exactly the AI DigitalSourceType value `dst` — the bare value, or the exact
@@ -91,19 +113,22 @@ export function detectXmpAiSignatures(packets) {
   const signals = [];
   let digitalSourceType = null;
   for (const xml of packets) {
-    // Extract DigitalSourceType only from the exact IPTC property: the qualified
-    // `Iptc4xmpCore:DigitalSourceType` or the intentionally-supported unqualified `DigitalSourceType`.
-    // A foreign namespace (ex:DigitalSourceType) or a longer name ending in DigitalSourceType
-    // (ex:NotDigitalSourceType) is NOT the IPTC property, and a bare occurrence in an unrelated
-    // description/comment is not a claim. The extracted value must equal the AI value exactly
-    // (or its controlled-vocabulary URI) — substrings like "nottrainedAlgorithmicMedia" are rejected.
-    const attrRe = new RegExp(`(?:^|[\\s<])${DST_PROPERTY}\\s*=\\s*"([^"]*)"`, 'gi');
-    const liRe = new RegExp(`<${DST_PROPERTY}[^>]*>([\\s\\S]*?)<\\/${DST_PROPERTY}>`, 'gi');
+    const ns = xmlnsMap(xml);
+    // Extract DigitalSourceType only from the exact IPTC property AND only when its prefix resolves
+    // to the canonical IPTC namespace. `prefix:(…)` is captured and validated, so a packet that binds
+    // Iptc4xmpCore to an unrelated URI, or uses a foreign prefix (ex:DigitalSourceType), is rejected.
+    // The extracted value must equal the AI value exactly (or its controlled-vocabulary URI).
+    const attrRe = /(?:^|[\s<])(?:([A-Za-z0-9]+):)?(DigitalSourceType)\s*=\s*"([^"]*)"/gi;
+    const liRe =
+      /<(?:([A-Za-z0-9]+):)?(DigitalSourceType)[^>]*>([\s\S]*?)<\/(?:[A-Za-z0-9]+:)?DigitalSourceType>/gi;
     const candidates = [];
-    for (const m of xml.matchAll(attrRe)) candidates.push(m[1]);
+    for (const m of xml.matchAll(attrRe)) {
+      if (prefixResolvesTo(ns, m[1] ?? null, IPTC_NS)) candidates.push(m[3]);
+    }
     for (const m of xml.matchAll(liRe)) {
+      if (!prefixResolvesTo(ns, m[1] ?? null, IPTC_NS)) continue;
       // The container's value is the text of its rdf:li item(s).
-      for (const li of m[1].matchAll(/<rdf:li[^>]*>([^<]*)<\/rdf:li>/gi)) candidates.push(li[1]);
+      for (const li of m[3].matchAll(/<rdf:li[^>]*>([^<]*)<\/rdf:li>/gi)) candidates.push(li[1]);
     }
     for (const value of candidates) {
       for (const dst of AI_DIGITAL_SOURCE_TYPES) {
@@ -113,18 +138,22 @@ export function detectXmpAiSignatures(packets) {
         }
       }
     }
-    const lower = xml.toLowerCase();
-    const creatorMatch = lower.match(/creatortool\s*=\s*"([^"]+)"/);
-    if (creatorMatch) {
-      const tool = creatorMatch[1].toLowerCase();
+    // CreatorTool: only the exact `xmp:CreatorTool` property (prefix must resolve to the canonical
+    // XMP namespace) or the intentionally-supported unqualified form — a foreign/longer name
+    // (ex:CreatorTool, ex:NotCreatorTool) is not the XMP property.
+    const ctAttrRe = /(?:^|[\s<])(?:([A-Za-z0-9]+):)?(CreatorTool)\s*=\s*"([^"]*)"/gi;
+    for (const m of xml.matchAll(ctAttrRe)) {
+      if (!prefixResolvesTo(ns, m[1] ?? null, XMP_NS)) continue;
+      const tool = m[3].toLowerCase();
       const hit = AI_CREATOR_TOOLS.find((t) => tool.includes(t));
-      if (hit) signals.push(`xmp:CreatorTool="${creatorMatch[1]}"`);
+      if (hit) signals.push(`xmp:CreatorTool="${m[3]}"`);
     }
-    // rdf:li style creator tool
-    const liMatch = lower.match(/<xmp:creatortool>\s*<rdf:li>([^<]+)<\/rdf:li>/);
-    if (liMatch) {
-      const hit = AI_CREATOR_TOOLS.find((t) => liMatch[1].toLowerCase().includes(t));
-      if (hit) signals.push(`xmp:CreatorTool="${liMatch[1]}"`);
+    // rdf:li style creator tool (exact xmp:CreatorTool element, namespace-validated).
+    const ctLiRe = /<(?:([A-Za-z0-9]+):)?(CreatorTool)[^>]*>\s*<rdf:li>([^<]+)<\/rdf:li>/gi;
+    for (const m of xml.matchAll(ctLiRe)) {
+      if (!prefixResolvesTo(ns, m[1] ?? null, XMP_NS)) continue;
+      const hit = AI_CREATOR_TOOLS.find((t) => m[3].toLowerCase().includes(t));
+      if (hit) signals.push(`xmp:CreatorTool="${m[3]}"`);
     }
   }
   return { hit: signals.length > 0, signals, digitalSourceType };
