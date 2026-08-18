@@ -139,11 +139,15 @@ into the v1.0.0 submission.
 - **XMP `trainedAlgorithmicMedia` requires the DigitalSourceType property.** The term must appear as
   the IPTC `DigitalSourceType` value (attribute, `rdf:li` inside a DigitalSourceType container, or
   the IPTC controlled-vocabulary URI) — a bare occurrence in an unrelated description/comment no
-  longer forces a 0.99 verdict.
+  longer forces a 0.99 verdict. The controlled-vocabulary URI is itself scoped to a DigitalSourceType
+  attribute/container, so the full URI appearing only in `dc:description` text is not a claim.
+- **`convert_ateeqq.py` reads the image size from `config.vision_config.image_size`** (SigLIP stores
+  it on the vision sub-config, not the top level), normalizes tuple/list sizes, and still interpolates
+  positional embeddings on export + validation for non-configured sizes.
 
 ### Testing
 
-- **468 tests / 35 files** (was 227/24 at v1.0.0). New unit suites for the previously untested
+- **469 tests / 35 files** (was 227/24 at v1.0.0). New unit suites for the previously untested
   popup/options/onboarding pages, the offscreen orchestrator, the service-worker router, and the
   manifest verifier (`tools/verify-manifest.mjs`). Concurrency/stress suites (50-unique and
   50-identical-image stampedes verifying exactly-once inference and cache-collapse, plus

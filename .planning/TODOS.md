@@ -50,3 +50,7 @@
       matching restricted to Software/CreatorTool (an Artist named "Leonardo" is no longer a hit),
       and XMP trainedAlgorithmicMedia requires the IPTC DigitalSourceType property (attribute /
       rdf:li container / controlled-vocabulary URI), not a bare term anywhere in the XML.
+- [x] PR #1 review round 9 (2026-08-18): scoped the controlled-vocabulary URI to a DigitalSourceType
+      property (a bare URI in dc:description no longer forces a verdict); convert_ateeqq.py reads
+      image size from config.vision_config.image_size (SigLIP vision sub-config) with tuple/list
+      normalization.

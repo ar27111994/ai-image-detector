@@ -38,8 +38,13 @@ def main() -> int:
     # The checkpoint's configured image size is authoritative. SigLIP uses fixed positional
     # embeddings, so a non-configured size (e.g. 384/512 when config is 224) needs positional
     # interpolation on both the export and the reference forward pass, else the patch/position
-    # shapes mismatch. Default to the configured size when --size is not given.
-    configured = int(getattr(model.config, "image_size", args.size))
+    # shapes mismatch. SigLIP stores image_size on the vision sub-config, not the top-level config;
+    # default to it when --size is not given.
+    vision = getattr(model.config, "vision_config", model.config)
+    raw = getattr(vision, "image_size", None)
+    if isinstance(raw, (list, tuple)):
+        raw = raw[0]
+    configured = int(raw) if raw is not None else (args.size if args.size is not None else 512)
     size = args.size if args.size is not None else configured
     interpolate = size != configured
     if interpolate:

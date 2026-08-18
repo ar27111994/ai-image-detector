@@ -122,7 +122,7 @@ describe('png-text.detectPngAiSignatures', () => {
 describe('xmp.detectXmpAiSignatures', () => {
   it('flags trainedAlgorithmicMedia DigitalSourceType', () => {
     const packets = [
-      '<x:xmpmeta><rdf:li>http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia</rdf:li></x:xmpmeta>',
+      '<x:xmpmeta><Iptc4xmpCore:DigitalSourceType><rdf:Seq><rdf:li>http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia</rdf:li></rdf:Seq></Iptc4xmpCore:DigitalSourceType></x:xmpmeta>',
     ];
     const { hit, digitalSourceType } = detectXmpAiSignatures(packets);
     expect(hit).toBe(true);
@@ -175,6 +175,15 @@ describe('xmp.detectXmpAiSignatures', () => {
       '<x:xmpmeta><Iptc4xmpCore:DigitalSourceType><rdf:Seq><rdf:li>trainedAlgorithmicMedia</rdf:li></rdf:Seq></Iptc4xmpCore:DigitalSourceType></x:xmpmeta>',
     ]);
     expect(hit).toBe(true);
+  });
+
+  it('does NOT treat the controlled-vocabulary URI in a random description as a DigitalSourceType claim', () => {
+    // Adversarial: the full IPTC URI appears only in dc:description text, with no DigitalSourceType
+    // property — must not force a definitive AI verdict even though it names the CV term.
+    const { hit } = detectXmpAiSignatures([
+      '<x:xmpmeta><dc:description><rdf:li>See http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia for the spec</rdf:li></dc:description></x:xmpmeta>',
+    ]);
+    expect(hit).toBe(false);
   });
 });
 

@@ -69,15 +69,16 @@ export function detectXmpAiSignatures(packets) {
     // inside a DigitalSourceType container). A bare occurrence in an unrelated description/comment
     // must not force a definitive AI verdict.
     for (const dst of AI_DIGITAL_SOURCE_TYPES) {
+      // Attribute form: DigitalSourceType="…<value-or-cv-uri>…" (accepts the bare value or the
+      // full controlled-vocabulary URI as the attribute value).
       const attrRe = new RegExp(`DigitalSourceType\\s*=\\s*"[^"]*${dst}`, 'i');
+      // Container form: an rdf:li inside a DigitalSourceType element, holding the bare value or
+      // the controlled-vocabulary URI.
       const liRe = new RegExp(
         `<[^>]*DigitalSourceType[^>]*>[\\s\\S]*?<rdf:li>[^<]*${dst}[^<]*<\\/rdf:li>`,
         'i',
       );
-      // The IPTC controlled-vocabulary URI (…/newscodes/digitalsourcetype/<value>) is itself a
-      // structured DigitalSourceType reference, so it is authoritative even without a wrapper.
-      const cvUriRe = new RegExp(`digitalsourcetype/${dst}`, 'i');
-      if (attrRe.test(xml) || liRe.test(xml) || cvUriRe.test(xml)) {
+      if (attrRe.test(xml) || liRe.test(xml)) {
         digitalSourceType = dst;
         signals.push(`xmp:DigitalSourceType=${dst}`);
       }
