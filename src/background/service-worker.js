@@ -504,7 +504,15 @@ async function resetModel() {
   const mine = modelManager.resetModelState();
   resettingModel = mine;
   try {
-    return await mine;
+    const result = await mine;
+    // After the persisted reset completes, drop in-memory state that could serve the old model:
+    // recreate the offscreen document (unloads the ONNX session + clears the cached manifest) and
+    // clear the analysis cache, so a re-download under the same key can't reuse stale weights or
+    // verdicts computed by the removed model.
+    await recreateOffscreenDocument().catch(() => {});
+    analysisCache.clear();
+    inflightAnalysis.clear();
+    return result;
   } finally {
     if (resettingModel === mine) resettingModel = null;
   }

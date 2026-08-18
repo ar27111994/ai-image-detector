@@ -13,7 +13,7 @@
 
 ## Test counts
 
-<!-- AUTO:TEST_COUNT -->481<!-- /AUTO:TEST_COUNT --> tests across <!-- AUTO:TEST_FILES -->35<!-- /AUTO:TEST_FILES --> files (unit + integration), plus 7 e2e cases in real Chrome.
+<!-- AUTO:TEST_COUNT -->482<!-- /AUTO:TEST_COUNT --> tests across <!-- AUTO:TEST_FILES -->35<!-- /AUTO:TEST_FILES --> files (unit + integration), plus 7 e2e cases in real Chrome.
 
 > Test counts, coverage %, and benchmark accuracy in the docs are auto-synced from the source of
 > truth via `npm run docs:sync` (see CONTRIBUTING.md). The `test` CI job fails if they drift
@@ -25,7 +25,7 @@ The enforced **90% floor** (lines/branches/functions/statements) spans **all of 
 currently
 
 <!-- AUTO:COV_LINES -->98.4<!-- /AUTO:COV_LINES --> lines /
-<!-- AUTO:COV_BRANCHES -->91.0<!-- /AUTO:COV_BRANCHES --> branches /
+<!-- AUTO:COV_BRANCHES -->91.2<!-- /AUTO:COV_BRANCHES --> branches /
 <!-- AUTO:COV_FUNCS -->98.1<!-- /AUTO:COV_FUNCS --> functions.
 
 Breakdown: the pure, platform-independent logic (`src/shared/**`, `src/background/model-manager.js`)

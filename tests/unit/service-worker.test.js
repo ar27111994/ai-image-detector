@@ -75,7 +75,7 @@ beforeEach(async () => {
   chromeStub.chrome.runtime.onInstalled = { addListener: () => {} };
   chromeStub.chrome.runtime.onStartup = { addListener: () => {} };
   chromeStub.chrome.runtime.getContexts = async () => [{ contextType: 'OFFSCREEN_DOCUMENT' }];
-  chromeStub.chrome.offscreen = { createDocument: async () => {} };
+  chromeStub.chrome.offscreen = { createDocument: async () => {}, closeDocument: async () => {} };
 
   vi.resetModules();
   await import('../../src/background/service-worker.js');
@@ -448,6 +448,31 @@ describe('service-worker router', () => {
     expect(ensureModel).toHaveBeenCalledTimes(2); // the parked one + the fresh one
 
     first.catch(() => {}); // the parked download may reject on teardown; ignore
+  });
+
+  it('MODEL_RESET drops the in-memory session + analysis cache after the persisted reset', async () => {
+    const { resetModelState } = await import('../../src/background/model-manager.js');
+    resetModelState.mockClear();
+    let closed = 0;
+    chromeStub.chrome.offscreen.closeDocument = async () => {
+      closed++;
+    };
+
+    // Populate the analysis cache via a real analysis (cached on the second identical request).
+    const fixed = fakeImageBytes();
+    globalThis.fetch = vi.fn(async () => streamFetchResponse(fixed));
+    await dispatch(req(MSG.ANALYZE_IMAGE, { url: 'https://cdn.example/c.png' }), pageSender);
+    const before = await dispatch(req(MSG.GET_STATUS), pageSender);
+    expect(before.result.cacheSize).toBeGreaterThan(0); // cache populated
+
+    const res = await dispatch(req(MSG.MODEL_RESET), pageSender);
+    expect(res.ok).toBe(true);
+    expect(resetModelState).toHaveBeenCalled();
+
+    // The offscreen document was closed (session dropped) and the analysis cache cleared.
+    expect(closed).toBeGreaterThan(0);
+    const after = await dispatch(req(MSG.GET_STATUS), pageSender);
+    expect(after.result.cacheSize).toBe(0);
   });
 
   it('a start that arrives while reset is in flight awaits the reset before checking readiness', async () => {
