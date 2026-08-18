@@ -71,8 +71,18 @@ export async function getModelState() {
   );
 }
 
-async function setModelState(patch) {
+/**
+ * Generation-aware compare-and-set: read current state, apply the patch, and persist — but only
+ * if `gen` is still the current generation IMMEDIATELY before the storage write. The read is
+ * awaited, so a reset/replacement that advances the generation during that await must not be
+ * overwritten by this stale commit. Returns null when superseded (write dropped).
+ * @param {object} patch fields to merge into the model state
+ * @param {number|null} gen setup generation token (null = always commit)
+ * @returns {Promise<object|null>} the committed state, or null if superseded
+ */
+async function setModelStateIfCurrent(patch, gen) {
   const state = { ...(await getModelState()), ...patch };
+  if (gen != null && !isActive(gen)) return null; // superseded during the read — drop the write
   await chrome.storage.local.set({ [STORAGE_KEYS.MODEL_STATE]: state });
   return state;
 }
@@ -108,12 +118,10 @@ export async function downloadVariant(variantSpec, onProgress, gen = null) {
     });
   }
 
-  // Commit a state/blob write only while this attempt is still the current generation. A stale
-  // (superseded) attempt is a no-op so its late settlement can't overwrite a newer retry.
-  const commitState = async (patch) => {
-    if (gen != null && !isActive(gen)) return null; // superseded — drop the write
-    return await setModelState(patch);
-  };
+  // Commit a state write only while this attempt is still the current generation, atomically with
+  // the storage write (compare-and-set). A stale (superseded) attempt is a no-op so its late
+  // settlement can't overwrite a newer retry/reset.
+  const commitState = (patch) => setModelStateIfCurrent(patch, gen);
   const throwIfSuperseded = () => {
     if (gen != null && !isActive(gen)) {
       throw Object.assign(new Error('superseded by a newer model download'), {
@@ -201,16 +209,18 @@ export async function downloadVariant(variantSpec, onProgress, gen = null) {
 
   throwIfSuperseded(); // don't persist a stale blob over a newer attempt
   await putModelBlob(key, blob);
-  // Revalidate after the awaited write: a reset/replacement may have advanced the generation
-  // while the blob write was pending. A superseded attempt must not publish `ready` over the
-  // newer state even though its blob was already written.
-  throwIfSuperseded();
-  const state = await setModelState({
+  // Publish `ready` via generation-aware compare-and-set: a reset/replacement that advanced the
+  // generation while the blob write (or this state read) was pending drops this stale commit, so
+  // it can't overwrite the newer state even though the blob was already written.
+  const state = await commitState({
     status: 'ready',
     progress: 1,
     downloadedBytes: received,
     error: null,
   });
+  if (state == null) {
+    throw Object.assign(new Error('superseded by a newer model download'), { code: 'SUPERSEDED' });
+  }
   onProgress?.(state);
   broadcastProgress(state);
   return { key, bytes: received, verified: Boolean(sha256) };
@@ -281,19 +291,23 @@ export async function ensureModel(epPreference, onProgress, gen = null) {
       });
     }
     await putModelBlob(variant.key, bundled);
-    // Revalidate after the awaited write before publishing ready.
-    if (gen != null && !isActive(gen)) {
+    // Publish `ready` via generation-aware compare-and-set so a reset/replacement that advanced
+    // the generation during the blob write (or this state read) drops this stale commit.
+    const state = await setModelStateIfCurrent(
+      {
+        status: 'ready',
+        progress: 1,
+        downloadedBytes: bundled.size,
+        error: null,
+        variant: variant.key,
+      },
+      gen,
+    );
+    if (state == null) {
       throw Object.assign(new Error('superseded by a newer model download'), {
         code: 'SUPERSEDED',
       });
     }
-    const state = await setModelState({
-      status: 'ready',
-      progress: 1,
-      downloadedBytes: bundled.size,
-      error: null,
-      variant: variant.key,
-    });
     onProgress?.(state);
     return { key: variant.key, bytes: bundled.size, bundled: true, verified: true };
   }

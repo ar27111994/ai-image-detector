@@ -30,3 +30,7 @@
 - [x] PR #1 review round 3 (2026-08-18): post-write supersession gate, streamed image-fetch cap,
       raw-byte pre-copy size check, model size-budget cancel + final-size check, build fails without
       the manifest, and added tools/verify-manifest.mjs (`npm run models:manifest`).
+- [x] PR #1 review round 4 (2026-08-18): model-state writes are now a generation-aware
+      compare-and-set (`setModelStateIfCurrent`), so a superseded download's late `ready` commit
+      can't overwrite a reset/replacement even when the generation advances during the final state
+      read. Removed the unused `setModelState`.

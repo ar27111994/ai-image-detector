@@ -76,10 +76,12 @@ into the v1.0.0 submission.
 
 ### Fixed (PR #1 review round 3 — input caps + hardening)
 
-- **Superseded model commits fully gated.** The generation check now re-validates after the
-  awaited blob write and before publishing `ready` (in both `downloadVariant` and the bundled fast
-  path), closing the residual race where a reset/replacement during the write let a superseded
-  attempt persist its blob and overwrite the newer state.
+- **Superseded model commits fully gated.** Every model-state write now goes through a
+  generation-aware compare-and-set (`setModelStateIfCurrent`) that re-checks the generation
+  _immediately before_ the storage write — closing the residual race where a reset/replacement
+  during the awaited blob write **or** the final state read let a superseded attempt publish
+  `ready` over the newer state. The now-unused `setModelState` helper was removed; all writes are
+  generation-gated.
 - **Image fetch streams with a hard cap.** `fetchImageBytes` reads the response body in chunks and
   cancels the moment `MAX_IMAGE_BYTES` is exceeded — a chunked response without `Content-Length`
   can no longer be buffered unbounded before the size check.
@@ -95,7 +97,7 @@ into the v1.0.0 submission.
 
 ### Testing
 
-- **453 tests / 35 files** (was 227/24 at v1.0.0). New unit suites for the previously untested
+- **454 tests / 35 files** (was 227/24 at v1.0.0). New unit suites for the previously untested
   popup/options/onboarding pages, the offscreen orchestrator, the service-worker router, and the
   manifest verifier (`tools/verify-manifest.mjs`). Concurrency/stress suites (50-unique and
   50-identical-image stampedes verifying exactly-once inference and cache-collapse, plus

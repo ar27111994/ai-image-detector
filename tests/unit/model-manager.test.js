@@ -15,7 +15,11 @@ globalThis.chrome = {
   },
   storage: {
     local: {
-      get: async (key) => (store.has(key) ? { [key]: store.get(key) } : {}),
+      // getHook lets a test suspend/interleave the storage read (to force a race window).
+      get: async (key) => {
+        if (globalThis.__storageGetHook) await globalThis.__storageGetHook(key);
+        return store.has(key) ? { [key]: store.get(key) } : {};
+      },
       set: async (obj) => {
         for (const [k, v] of Object.entries(obj)) store.set(k, v);
       },
@@ -340,13 +344,51 @@ describe('model-manager.downloadVariant full flow', () => {
       undefined,
       gA,
     );
-    // Wait until the attempt is parked in the awaited put, then supersede + release the write.
-    await new Promise((r) => setTimeout(r, 30));
+    // Deterministic: wait until the put is actually invoked (parked), then supersede + release.
+    await vi.waitFor(() => expect(putSpy).toHaveBeenCalled());
     beginModelSetup(); // supersede
     releasePut();
     await expect(attempt).rejects.toThrow(/superseded/i);
     expect(store.get('model.state.v1')?.status).not.toBe('ready');
     putSpy.mockRestore();
+  });
+
+  it('drops a stale ready commit when the generation advances during the final state read', async () => {
+    // The residual race: the pre-check passed, but the final `ready` commit's awaited getModelState()
+    // opens a window where a reset/replacement can advance the generation; the stale attempt then
+    // writes `ready` over the newer state. The compare-and-set re-checks immediately before the write.
+    const bytes = new Uint8Array([9, 9, 9]);
+    const sha = await sha256Hex(bytes.buffer);
+    fetchImpl = async () => streamResponse(bytes, 1);
+
+    const gA = beginModelSetup();
+    // Pause the storage read that feeds the FINAL `ready` commit. On a clean download the reads are:
+    // [none (initial), downloading (progress), downloading (final ready commit)]. Park on the 3rd.
+    const reads = [];
+    let resumeRead;
+    let parked;
+    const parkedP = new Promise((r) => {
+      parked = r;
+    });
+    globalThis.__storageGetHook = async () => {
+      reads.push(store.get('model.state.v1')?.status ?? 'none');
+      if (reads.length === 3) {
+        parked(); // signal we're parked on the final read
+        await new Promise((r) => {
+          resumeRead = r;
+        });
+      }
+    };
+    const attempt = downloadVariant(
+      { key: 'm-fr', url: 'https://x.test/m.onnx', sha256: sha, sizeBytes: 3 },
+      undefined,
+      gA,
+    );
+    await parkedP; // deterministic: the attempt is parked on the final ready-commit read
+    beginModelSetup(); // supersede during the pending final read
+    resumeRead(); // let the stale read resolve; the CAS must drop the ready write
+    await expect(attempt).rejects.toThrow(/superseded/i);
+    expect(store.get('model.state.v1')?.status).not.toBe('ready');
   });
 });
 
