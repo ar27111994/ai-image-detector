@@ -430,6 +430,40 @@ describe('service-worker router', () => {
     first.catch(() => {}); // the parked download may reject on teardown; ignore
   });
 
+  it('a start that arrives while reset is in flight awaits the reset before checking readiness', async () => {
+    const { ensureModel, resetModelState } = await import('../../src/background/model-manager.js');
+    // Reset parks (queued clear+missing not yet committed). A start arriving now carries a newer
+    // generation, so the supersession check won't stop it — it must await the reset barrier, so
+    // ensureModel runs only after reset finishes (and sees `missing`, not a stale pre-clear ready).
+    let releaseReset;
+    resetModelState.mockImplementationOnce(
+      () =>
+        new Promise((r) => {
+          releaseReset = () => r({ reset: true });
+        }),
+    );
+    const callOrder = [];
+    ensureModel.mockImplementation(async () => {
+      callOrder.push('ensureModel');
+      return { alreadyReady: false, started: true };
+    });
+    resetModelState.mockClear();
+    ensureModel.mockClear();
+
+    const reset = dispatch(req(MSG.MODEL_RESET), pageSender);
+    const start = dispatch(req(MSG.MODEL_DOWNLOAD_START), pageSender); // arrives during reset
+    // The start must NOT have called ensureModel yet — it's awaiting the reset barrier.
+    await new Promise((r) => setTimeout(r, 30));
+    expect(ensureModel).not.toHaveBeenCalled(); // blocked behind the reset barrier
+
+    releaseReset();
+    await reset;
+    const res = await start;
+    expect(res.ok).toBe(true);
+    expect(ensureModel).toHaveBeenCalledTimes(1); // ran only after reset completed
+    expect(callOrder).toEqual(['ensureModel']); // after reset, not before
+  });
+
   it('a superseded download settling does NOT clear a replacement download dedup handle', async () => {
     const { ensureModel } = await import('../../src/background/model-manager.js');
     // Attempt A parks. Reset clears the handle and starts replacement B (parks). When A settles,

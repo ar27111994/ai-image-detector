@@ -31,6 +31,7 @@ import { isSiteEnabled, loadSettings, setSiteEnabled } from '../shared/settings.
 let creatingOffscreen = null;
 let initializingSession = null;
 let downloadingModel = null; // in-flight ensureModel promise (dedup concurrent download starts)
+let resettingModel = null; // in-flight resetModelState promise (new starts must await it)
 const analysisCache = new LruCache(ANALYSIS_CACHE_MAX_ENTRIES);
 const inflightAnalysis = new Map(); // contentHash -> Promise<result> (dedup concurrent identical work)
 let cachedManifest = null;
@@ -464,6 +465,10 @@ async function startModelDownload() {
   // attempt carries a generation token: a superseded (timed-out) attempt keeps running in the
   // background, but model-manager drops its late state/blob commits so it can't overwrite the
   // retry's result.
+  // A reset in flight must be a barrier: a start that begins after the reset bumped the generation
+  // carries a NEWER token (so it is not superseded), and without awaiting the reset it could read
+  // the pre-clear `ready` state and report alreadyReady for a model reset is about to remove.
+  if (resettingModel) await resettingModel.catch(() => {});
   if (downloadingModel) return await downloadingModel;
   const gen = modelManager.beginModelSetup();
   const mine = withTimeout(
@@ -489,5 +494,11 @@ async function resetModel() {
   // (clear blobs + persist `missing`) through the model-manager's serialized write queue.
   modelManager.beginModelSetup();
   downloadingModel = null;
-  return await modelManager.resetModelState();
+  const mine = modelManager.resetModelState();
+  resettingModel = mine;
+  try {
+    return await mine;
+  } finally {
+    if (resettingModel === mine) resettingModel = null;
+  }
 }
