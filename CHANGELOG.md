@@ -109,9 +109,25 @@ into the v1.0.0 submission.
   0/1 for logits variants), so a malformed variant can't reach inference and produce a garbage
   calibrated verdict.
 
+### Fixed (PR #1 review round 6 — serialized model lifecycle)
+
+- **Model-state mutations are serialized through one write queue.** Download progress/ready/error
+  commits and reset all run through `enqueueModelWrite`, so a reset's clear+`missing` can never
+  interleave with a superseded download's storage write — the newest action is always authoritative.
+- **Stale blob persistence is cleaned up on supersession.** A superseded download/bundled write
+  deletes the blob it just persisted (`deleteModelBlob`) so a reset never leaves a stale ~311MB
+  model in IndexedDB after clearing the store.
+- **A settled superseded download no longer clobbers a replacement's dedup handle.** The
+  `startModelDownload` cleanup clears `downloadingModel` only when it still refers to that
+  invocation's own promise, so a still-active replacement keeps deduplicating concurrent starts.
+- **`convert_ateeqq.py` defaults to the checkpoint's configured image size** and wraps both the
+  ONNX export and the reference validation with `interpolate_pos_encoding` when a non-configured
+  size is requested — SigLIP's fixed positional embeddings otherwise cause a patch/position shape
+  mismatch at export/validation.
+
 ### Testing
 
-- **458 tests / 35 files** (was 227/24 at v1.0.0). New unit suites for the previously untested
+- **460 tests / 35 files** (was 227/24 at v1.0.0). New unit suites for the previously untested
   popup/options/onboarding pages, the offscreen orchestrator, the service-worker router, and the
   manifest verifier (`tools/verify-manifest.mjs`). Concurrency/stress suites (50-unique and
   50-identical-image stampedes verifying exactly-once inference and cache-collapse, plus

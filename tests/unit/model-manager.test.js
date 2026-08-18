@@ -55,6 +55,10 @@ globalThis.indexedDB = {
               setTimeout(() => r.onsuccess?.(), 0);
               return r;
             },
+            delete: (k) => {
+              idbData.delete(k);
+              return { onsuccess: null };
+            },
           }),
         });
       },
@@ -328,13 +332,17 @@ describe('model-manager.downloadVariant full flow', () => {
     const sha = await sha256Hex(bytes.buffer);
     fetchImpl = async () => streamResponse(bytes, 1);
 
-    // Make putModelBlob's IDB put controllable so we can supersede during the awaited write.
+    // Make putModelBlob's IDB put controllable AND have it actually write on release, so the
+    // post-supersession cleanup (deleteModelBlob) is exercised meaningfully.
     const modelStore = await import('../../src/shared/model-store.js');
     let releasePut;
     const putSpy = vi.spyOn(modelStore, 'putModelBlob').mockImplementation(
-      () =>
+      (k, blob) =>
         new Promise((r) => {
-          releasePut = r;
+          releasePut = () => {
+            idbData.set(k, blob); // the stale write actually lands
+            r();
+          };
         }),
     );
 
@@ -350,6 +358,62 @@ describe('model-manager.downloadVariant full flow', () => {
     releasePut();
     await expect(attempt).rejects.toThrow(/superseded/i);
     expect(store.get('model.state.v1')?.status).not.toBe('ready');
+    // The stale blob must be removed after supersession, not left persisted.
+    expect(idbData.has('m-pw')).toBe(false);
+    putSpy.mockRestore();
+  });
+
+  it('a superseded bundled-model write removes its blob after supersession', async () => {
+    // The bundled path persists under the same generation-aware queue; on supersession the stale
+    // blob must be deleted, not left persisted.
+    const { ensureModel } = await import('../../src/background/model-manager.js');
+    const bytes = new Uint8Array([1, 2, 3]);
+    const sha = await sha256Hex(bytes.buffer);
+    store.clear();
+    idbData.clear();
+    fetchImpl = async (url) => {
+      const u = String(url);
+      if (u.endsWith('models/manifest.json')) {
+        return {
+          ok: true,
+          json: async () => ({
+            variants: [
+              {
+                kind: 'wasm',
+                key: 'primary-int8',
+                url: 'https://x.test/m.onnx',
+                sha256: sha,
+                sizeBytes: 3,
+                inputSize: 256,
+              },
+            ],
+          }),
+        };
+      }
+      if (u.includes('/models/primary-int8.onnx')) {
+        return { ok: true, blob: async () => new Blob([bytes]) };
+      }
+      return { ok: false, status: 404 };
+    };
+    // Block the bundled blob write, then supersede and release; the stale blob must be cleaned up.
+    const modelStore = await import('../../src/shared/model-store.js');
+    let releasePut;
+    const putSpy = vi.spyOn(modelStore, 'putModelBlob').mockImplementation(
+      (k, blob) =>
+        new Promise((r) => {
+          releasePut = () => {
+            idbData.set(k, blob); // the stale write actually lands
+            r();
+          };
+        }),
+    );
+    const gA = beginModelSetup();
+    const attempt = ensureModel('wasm', undefined, gA);
+    await vi.waitFor(() => expect(putSpy).toHaveBeenCalled());
+    beginModelSetup(); // supersede
+    releasePut();
+    await expect(attempt).rejects.toThrow(/superseded/i);
+    expect(idbData.has('primary-int8')).toBe(false); // stale bundled blob removed
     putSpy.mockRestore();
   });
 

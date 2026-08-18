@@ -13,7 +13,6 @@ import {
   MAX_IMAGE_BYTES,
   MSG,
   OFFSCREEN_DOCUMENT_PATH,
-  STORAGE_KEYS,
   TIMEOUTS,
 } from '../shared/constants.js';
 import {
@@ -467,29 +466,26 @@ async function startModelDownload() {
   // retry's result.
   if (downloadingModel) return await downloadingModel;
   const gen = modelManager.beginModelSetup();
-  downloadingModel = withTimeout(
+  const mine = withTimeout(
     modelManager.ensureModel('wasm', undefined, gen), // safe default; EP re-selected at inference
     TIMEOUTS.MODEL_DOWNLOAD_MS,
     'model download',
   );
+  downloadingModel = mine;
   try {
-    return await downloadingModel;
+    return await mine;
   } finally {
-    downloadingModel = null;
+    // Clear the handle only if it still refers to THIS invocation's promise — a reset may have
+    // already cleared it and a replacement may have populated it; clearing unconditionally would
+    // clobber the still-active replacement's dedup handle.
+    if (downloadingModel === mine) downloadingModel = null;
   }
 }
 
 async function resetModel() {
-  // Invalidate any in-flight download so its late settlement can't repopulate state after reset,
-  // AND drop the dedup handle: a post-reset MODEL_DOWNLOAD_START must start a fresh attempt, not
-  // await the now-superseded promise (which would reject with SUPERSEDED and leave installation
-  // unavailable until the old operation settles).
-  modelManager.beginModelSetup();
+  // Drop the dedup handle so a post-reset MODEL_DOWNLOAD_START starts a fresh attempt, then run
+  // the reset (advance generation + clear blobs + persist `missing`) through the model-manager's
+  // serialized write queue so a superseded download's late commit can never interleave with it.
   downloadingModel = null;
-  const { clearModelStore } = await import('../shared/model-store.js');
-  await clearModelStore();
-  await chrome.storage.local.set({
-    [STORAGE_KEYS.MODEL_STATE]: { status: 'missing', progress: 0, error: null },
-  });
-  return { reset: true };
+  return await modelManager.resetModelState();
 }

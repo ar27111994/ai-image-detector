@@ -37,3 +37,8 @@
 - [x] PR #1 review round 5 (2026-08-18): resetModel now clears the in-flight download dedup handle
       (post-reset start runs a fresh ensureModel, no SUPERSEDED reuse); manifest validator enforces
       outputType/aiLogitIndex semantics.
+- [x] PR #1 review round 6 (2026-08-18): model-state mutations serialized through one write queue
+      (enqueueModelWrite) so reset can't interleave with a superseded download's commit; stale blob
+      writes deleted on supersession; superseded download's settle no longer clobbers a replacement's
+      dedup handle (identity check); convert_ateeqq.py defaults to the configured image size with
+      interpolate_pos_encoding on export + validation.

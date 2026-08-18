@@ -41,6 +41,22 @@ function isActive(gen) {
   return gen === currentGeneration;
 }
 
+// Serialize every model-state mutation (download progress/ready/error AND reset) through a single
+// queue. A reset can then never interleave with a superseded download's storage write — mutations
+// run to completion one at a time, in issue order, so the newest action is always authoritative.
+let modelWriteQueue = Promise.resolve();
+
+/**
+ * Run `fn` exclusively (after all prior model-state mutations).
+ * @param {() => Promise<*>} fn the mutation to run under the queue
+ * @returns {Promise<*>} fn's result
+ */
+function enqueueModelWrite(fn) {
+  const run = modelWriteQueue.then(fn, fn);
+  modelWriteQueue = run.catch(() => {}); // keep the chain alive across failures
+  return run;
+}
+
 /**
  * Load the bundled model manifest.
  * @returns {Promise<{ variants: Array<object> }>} parsed models/manifest.json
@@ -81,14 +97,32 @@ export async function getModelState() {
  * @returns {Promise<object|null>} the committed state, or null if superseded
  */
 async function setModelStateIfCurrent(patch, gen) {
-  const state = { ...(await getModelState()), ...patch };
-  // Supersession is re-checked immediately before the write. The only remaining window is the
-  // synchronous gap between this check and the set() call (no await in between), which cannot
-  // interleave a reset in the single-threaded service worker; a reset can only advance the
-  // generation during the awaited read above, which this check catches.
-  if (gen != null && !isActive(gen)) return null; // superseded — drop the write
-  await chrome.storage.local.set({ [STORAGE_KEYS.MODEL_STATE]: state });
-  return state;
+  // Serialize through the model-write queue so a reset's clear+set can never interleave with this
+  // commit: mutations run one at a time in issue order, and the newest action is authoritative.
+  return enqueueModelWrite(async () => {
+    const state = { ...(await getModelState()), ...patch };
+    if (gen != null && !isActive(gen)) return null; // superseded — drop the write
+    await chrome.storage.local.set({ [STORAGE_KEYS.MODEL_STATE]: state });
+    return state;
+  });
+}
+
+/**
+ * Reset the model: advance the generation (superseding any in-flight attempt), clear the stored
+ * blobs, and persist `missing` — all under the write queue, so a superseded download's late
+ * state/blob write runs before or after this reset but never interleaved with it.
+ * @returns {Promise<{ reset: true }>}
+ */
+export async function resetModelState() {
+  beginModelSetup(); // supersede any in-flight attempt
+  return enqueueModelWrite(async () => {
+    const { clearModelStore } = await import('../shared/model-store.js');
+    await clearModelStore();
+    await chrome.storage.local.set({
+      [STORAGE_KEYS.MODEL_STATE]: { status: 'missing', progress: 0, error: null },
+    });
+    return { reset: true };
+  });
 }
 
 /**
@@ -212,10 +246,20 @@ export async function downloadVariant(variantSpec, onProgress, gen = null) {
   }
 
   throwIfSuperseded(); // don't persist a stale blob over a newer attempt
-  await putModelBlob(key, blob);
-  // Publish `ready` via generation-aware compare-and-set: a reset/replacement that advanced the
-  // generation while the blob write (or this state read) was pending drops this stale commit, so
-  // it can't overwrite the newer state even though the blob was already written.
+  // Persist the blob under the write queue, then re-check ownership: a reset can clear IndexedDB
+  // while this write is pending. If we were superseded, remove the blob we just wrote so a reset
+  // never leaves a stale model persisted.
+  await enqueueModelWrite(async () => {
+    await putModelBlob(key, blob);
+    if (gen != null && !isActive(gen)) {
+      const { deleteModelBlob } = await import('../shared/model-store.js');
+      await deleteModelBlob(key).catch(() => {}); // best-effort stale-write cleanup
+      throw Object.assign(new Error('superseded by a newer model download'), {
+        code: 'SUPERSEDED',
+      });
+    }
+  });
+  // Publish `ready` via generation-aware compare-and-set (serialized through the same queue).
   const state = await commitState({
     status: 'ready',
     progress: 1,
@@ -294,9 +338,18 @@ export async function ensureModel(epPreference, onProgress, gen = null) {
         code: 'SUPERSEDED',
       });
     }
-    await putModelBlob(variant.key, bundled);
-    // Publish `ready` via generation-aware compare-and-set so a reset/replacement that advanced
-    // the generation during the blob write (or this state read) drops this stale commit.
+    // Persist under the write queue and re-check ownership; on supersession remove the stale blob.
+    await enqueueModelWrite(async () => {
+      await putModelBlob(variant.key, bundled);
+      if (gen != null && !isActive(gen)) {
+        const { deleteModelBlob } = await import('../shared/model-store.js');
+        await deleteModelBlob(variant.key).catch(() => {});
+        throw Object.assign(new Error('superseded by a newer model download'), {
+          code: 'SUPERSEDED',
+        });
+      }
+    });
+    // Publish `ready` via generation-aware compare-and-set (serialized through the same queue).
     const state = await setModelStateIfCurrent(
       {
         status: 'ready',

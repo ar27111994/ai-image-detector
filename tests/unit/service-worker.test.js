@@ -15,6 +15,7 @@ vi.mock('../../src/background/model-manager.js', () => ({
   loadManifest: vi.fn(async () => ({ variants: [{ kind: 'wasm', key: 'primary-int8' }] })),
   ensureModel: vi.fn(async () => ({ alreadyReady: true })),
   beginModelSetup: vi.fn(() => 1),
+  resetModelState: vi.fn(async () => ({ reset: true })),
 }));
 
 // Model store: the SW's resetModel() imports it dynamically to clear the store.
@@ -427,6 +428,47 @@ describe('service-worker router', () => {
     expect(ensureModel).toHaveBeenCalledTimes(2); // the parked one + the fresh one
 
     first.catch(() => {}); // the parked download may reject on teardown; ignore
+  });
+
+  it('a superseded download settling does NOT clear a replacement download dedup handle', async () => {
+    const { ensureModel } = await import('../../src/background/model-manager.js');
+    // Attempt A parks. Reset clears the handle and starts replacement B (parks). When A settles,
+    // its finally must NOT clear B's handle — a third start must dedup with B, not start anew.
+    let releaseA;
+    let releaseB;
+    ensureModel
+      .mockImplementationOnce(
+        () =>
+          new Promise((r) => {
+            releaseA = r;
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise((r) => {
+            releaseB = r;
+          }),
+      );
+    ensureModel.mockClear();
+
+    const a = dispatch(req(MSG.MODEL_DOWNLOAD_START), pageSender); // attempt A parks
+    await new Promise((r) => setTimeout(r, 10));
+    await dispatch(req(MSG.MODEL_RESET), pageSender); // clears handle
+    const b = dispatch(req(MSG.MODEL_DOWNLOAD_START), pageSender); // replacement B parks
+    await new Promise((r) => setTimeout(r, 10));
+    expect(ensureModel).toHaveBeenCalledTimes(2); // A + B
+
+    // A settles (superseded). Its finally must not clear B's in-flight handle.
+    releaseA({ key: 'stale' });
+    await a;
+
+    // Third start while B still pending must SHARE B (no third ensureModel call).
+    const c = dispatch(req(MSG.MODEL_DOWNLOAD_START), pageSender);
+    releaseB({ key: 'primary-int8', bytes: 1, verified: true });
+    const [rb, rc] = await Promise.all([b, c]);
+    expect(rb.ok).toBe(true);
+    expect(rc.ok).toBe(true);
+    expect(ensureModel).toHaveBeenCalledTimes(2); // still 2 — C deduped with B
   });
 
   it('GET_TAB_STATS returns per-tab tallies after an analysis', async () => {

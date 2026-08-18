@@ -22,7 +22,7 @@ VALIDATION_TOLERANCE = 1e-3
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--size", type=int, default=384, choices=[224, 384, 512])
+    parser.add_argument("--size", type=int, default=None, choices=[224, 384, 512])
     parser.add_argument("--revision", default="main")
     args = parser.parse_args()
 
@@ -35,13 +35,36 @@ def main() -> int:
     model = SiglipForImageClassification.from_pretrained(MODEL_ID, revision=args.revision)
     model.eval()
 
-    out_path = CACHE / f"ateeqq-siglip2-{args.size}-fp32.onnx"
-    dummy = torch.randn(1, 3, args.size, args.size)
+    # The checkpoint's configured image size is authoritative. SigLIP uses fixed positional
+    # embeddings, so a non-configured size (e.g. 384/512 when config is 224) needs positional
+    # interpolation on both the export and the reference forward pass, else the patch/position
+    # shapes mismatch. Default to the configured size when --size is not given.
+    configured = int(getattr(model.config, "image_size", args.size))
+    size = args.size if args.size is not None else configured
+    interpolate = size != configured
+    if interpolate:
+        print(f"[convert] size {size} != configured {configured}; enabling interpolate_pos_encoding")
 
-    print(f"[convert] exporting ONNX at {args.size}x{args.size} (opset 17)…")
+    out_path = CACHE / f"ateeqq-siglip2-{size}-fp32.onnx"
+    dummy = torch.randn(1, 3, size, size)
+
+    print(f"[convert] exporting ONNX at {size}x{size} (opset 17)…")
+
+    class _Interpolating(torch.nn.Module):
+        """Wrap the classifier to interpolate positional embeddings at a non-configured size."""
+
+        def __init__(self, inner, flag):
+            super().__init__()
+            self.inner = inner
+            self.flag = flag
+
+        def forward(self, pixel_values):
+            return self.inner(pixel_values, interpolate_pos_encoding=self.flag)
+
+    export_model = _Interpolating(model, interpolate)
     torch.onnx.export(
-        model,
-        dummy,
+        export_model,
+        (dummy,),
         str(out_path),
         input_names=["pixel_values"],
         output_names=["logits"],
@@ -66,14 +89,16 @@ def main() -> int:
 
     rng = np.random.default_rng(1337)
     probes = [
-        rng.random((1, 3, args.size, args.size), dtype=np.float32) * 2 - 1,
-        np.zeros((1, 3, args.size, args.size), dtype=np.float32),
+        rng.random((1, 3, size, size), dtype=np.float32) * 2 - 1,
+        np.zeros((1, 3, size, size), dtype=np.float32),
     ]
     sess = ort.InferenceSession(str(out_path), providers=["CPUExecutionProvider"])
     worst = 0.0
     with torch.no_grad():
         for i, probe in enumerate(probes):
-            ref = model(torch.from_numpy(probe)).logits.numpy()
+            ref = model(
+                torch.from_numpy(probe), interpolate_pos_encoding=interpolate
+            ).logits.numpy()
             got = sess.run(None, {"pixel_values": probe})[0]
             diff = float(np.max(np.abs(ref - got)))
             worst = max(worst, diff)
