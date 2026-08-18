@@ -325,7 +325,19 @@ export async function loadBundledVariant(variant) {
  * @returns {Promise<{ alreadyReady?: boolean, key?: string, bytes?: number, bundled?: boolean, verified?: boolean }>}
  */
 export async function ensureModel(epPreference, onProgress, gen = null) {
-  if (await isModelReady()) return { alreadyReady: true };
+  // Supersession gate first: a reset advances the generation before clearing state, so a start
+  // that began before the reset (and would otherwise read the pre-reset `ready`) aborts here.
+  if (gen != null && !isActive(gen)) {
+    throw Object.assign(new Error('superseded by a newer model download'), { code: 'SUPERSEDED' });
+  }
+  const ready = await isModelReady();
+  // Re-check supersession AFTER the awaited readiness read: a reset may have advanced the
+  // generation while the read was in flight, in which case this start must not report the
+  // pre-reset `ready` it just observed.
+  if (gen != null && !isActive(gen)) {
+    throw Object.assign(new Error('superseded by a newer model download'), { code: 'SUPERSEDED' });
+  }
+  if (ready) return { alreadyReady: true };
   const manifest = await loadManifest();
   const variant = pickVariant(manifest, epPreference);
 

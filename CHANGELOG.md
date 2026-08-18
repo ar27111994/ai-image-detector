@@ -120,6 +120,10 @@ into the v1.0.0 submission.
 - **A settled superseded download no longer clobbers a replacement's dedup handle.** The
   `startModelDownload` cleanup clears `downloadingModel` only when it still refers to that
   invocation's own promise, so a still-active replacement keeps deduplicating concurrent starts.
+- **Reset is authoritative over a concurrent download start.** `resetModel` advances the generation
+  before clearing the dedup handle, and `ensureModel` re-checks supersession _after_ its awaited
+  readiness read — so a start that observed the pre-reset `ready` state can no longer report
+  `alreadyReady` for a model reset is about to remove (it rejects SUPERSEDED instead).
 - **`convert_ateeqq.py` defaults to the checkpoint's configured image size** and wraps both the
   ONNX export and the reference validation with `interpolate_pos_encoding` when a non-configured
   size is requested — SigLIP's fixed positional embeddings otherwise cause a patch/position shape
@@ -130,7 +134,7 @@ into the v1.0.0 submission.
 
 ### Testing
 
-- **461 tests / 35 files** (was 227/24 at v1.0.0). New unit suites for the previously untested
+- **462 tests / 35 files** (was 227/24 at v1.0.0). New unit suites for the previously untested
   popup/options/onboarding pages, the offscreen orchestrator, the service-worker router, and the
   manifest verifier (`tools/verify-manifest.mjs`). Concurrency/stress suites (50-unique and
   50-identical-image stampedes verifying exactly-once inference and cache-collapse, plus

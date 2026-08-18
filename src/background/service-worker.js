@@ -483,9 +483,11 @@ async function startModelDownload() {
 }
 
 async function resetModel() {
-  // Drop the dedup handle so a post-reset MODEL_DOWNLOAD_START starts a fresh attempt, then run
-  // the reset (advance generation + clear blobs + persist `missing`) through the model-manager's
-  // serialized write queue so a superseded download's late commit can never interleave with it.
+  // Advance the generation FIRST so any in-flight or just-starting ensureModel is superseded
+  // (its early supersession check fires before it can report a stale pre-reset `ready`). Then drop
+  // the dedup handle so a post-reset MODEL_DOWNLOAD_START starts a fresh attempt, and run the reset
+  // (clear blobs + persist `missing`) through the model-manager's serialized write queue.
+  modelManager.beginModelSetup();
   downloadingModel = null;
   return await modelManager.resetModelState();
 }

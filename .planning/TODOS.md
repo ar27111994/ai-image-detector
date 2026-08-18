@@ -42,3 +42,7 @@
       writes deleted on supersession; superseded download's settle no longer clobbers a replacement's
       dedup handle (identity check); convert_ateeqq.py defaults to the configured image size with
       interpolate_pos_encoding on export + validation.
+- [x] PR #1 review round 7 (2026-08-18): reset is authoritative over a concurrent download start —
+      `resetModel` advances the generation before clearing the dedup handle, and `ensureModel`
+      re-checks supersession after its awaited readiness read, so a start that observed pre-reset
+      `ready` rejects SUPERSEDED instead of reporting `alreadyReady` for a removed model.

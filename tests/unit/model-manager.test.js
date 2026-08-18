@@ -59,6 +59,10 @@ globalThis.indexedDB = {
               idbData.delete(k);
               return { onsuccess: null };
             },
+            clear: () => {
+              idbData.clear();
+              return { onsuccess: null };
+            },
           }),
         });
       },
@@ -415,6 +419,43 @@ describe('model-manager.downloadVariant full flow', () => {
     await expect(attempt).rejects.toThrow(/superseded/i);
     expect(idbData.has('primary-int8')).toBe(false); // stale bundled blob removed
     putSpy.mockRestore();
+  });
+
+  it('a start superseded by a reset during the readiness read rejects (never reports a removed model ready)', async () => {
+    // Model is ready; a start reads readiness (parks), a reset advances the generation mid-read,
+    // and the start must reject SUPERSEDED — not return alreadyReady for a model reset removes.
+    const { ensureModel, resetModelState, beginModelSetup } = await import(
+      '../../src/background/model-manager.js'
+    );
+    store.clear();
+    idbData.clear();
+    store.set('model.state.v1', { status: 'ready', variant: 'primary-int8' });
+    idbData.set('primary-int8', new Blob([new Uint8Array([1])]));
+
+    // Park ONLY the start's first readiness read; reset's own storage ops run freely.
+    let resumeRead;
+    let parked;
+    let parkedOnce = false;
+    const parkedP = new Promise((r) => {
+      parked = r;
+    });
+    globalThis.__storageGetHook = async () => {
+      if (parkedOnce) return;
+      parkedOnce = true;
+      parked();
+      await new Promise((r) => {
+        resumeRead = r;
+      });
+    };
+    const gA = beginModelSetup();
+    const attempt = ensureModel('wasm', undefined, gA);
+    await parkedP; // ensureModel is parked reading readiness
+    const resetP = resetModelState(); // advances the generation (supersedes gA) synchronously
+    resumeRead(); // release the stale readiness read; the post-read recheck must reject
+    await expect(attempt).rejects.toThrow(/superseded/i);
+    await resetP;
+    // Final state is the reset's `missing`, not a stale ready.
+    expect(store.get('model.state.v1')?.status).toBe('missing');
   });
 
   it('drops a stale ready commit when the generation advances during the final state read', async () => {
