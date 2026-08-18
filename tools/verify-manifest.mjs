@@ -66,6 +66,19 @@ export function validateManifest(manifest) {
     ) {
       problems.push(`${where}: std must be [r,g,b] positive numbers`);
     }
+    // Output semantics drive scoring (scoreFromOutput): an unrecognized outputType falls through to
+    // 2-class logits, and an out-of-range aiLogitIndex reads a nonexistent logit -> garbage score.
+    if (v.outputType != null && !['logits', 'p_real'].includes(v.outputType)) {
+      problems.push(
+        `${where}: outputType must be 'logits' | 'p_real' (got ${JSON.stringify(v.outputType)})`,
+      );
+    }
+    const isLogits = (v.outputType ?? 'logits') === 'logits';
+    if (isLogits && v.aiLogitIndex != null && ![0, 1].includes(v.aiLogitIndex)) {
+      problems.push(
+        `${where}: aiLogitIndex must be 0 or 1 for logits variants (got ${v.aiLogitIndex})`,
+      );
+    }
   });
   return problems;
 }

@@ -404,6 +404,31 @@ describe('service-worker router', () => {
     expect(res.result.status).toBe('ready');
   });
 
+  it('MODEL_RESET during a pending download lets a fresh start run a NEW ensureModel (no SUPERSEDED reuse)', async () => {
+    const { ensureModel, beginModelSetup } = await import('../../src/background/model-manager.js');
+    // A download is in flight (never settles during the test).
+    ensureModel.mockImplementationOnce(() => new Promise(() => {}));
+    ensureModel.mockClear();
+    beginModelSetup.mockClear();
+
+    const first = dispatch(req(MSG.MODEL_DOWNLOAD_START), pageSender); // parks
+    await new Promise((r) => setTimeout(r, 10)); // let it register the in-flight promise
+
+    // Reset: advances the generation and (after the fix) clears the in-flight dedup handle.
+    const reset = await dispatch(req(MSG.MODEL_RESET), pageSender);
+    expect(reset.ok).toBe(true);
+    expect(beginModelSetup).toHaveBeenCalled(); // reset invalidated the in-flight attempt
+
+    // A fresh start must begin a NEW ensureModel, not await the invalidated (pending) one.
+    ensureModel.mockImplementation(async () => ({ alreadyReady: true }));
+    const second = await dispatch(req(MSG.MODEL_DOWNLOAD_START), pageSender);
+    expect(second.ok).toBe(true);
+    expect(second.error).toBeUndefined(); // not a SUPERSEDED error from the stale promise
+    expect(ensureModel).toHaveBeenCalledTimes(2); // the parked one + the fresh one
+
+    first.catch(() => {}); // the parked download may reject on teardown; ignore
+  });
+
   it('GET_TAB_STATS returns per-tab tallies after an analysis', async () => {
     const fixed = fakeImageBytes();
     globalThis.fetch = vi.fn(async () => streamFetchResponse(fixed));

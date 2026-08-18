@@ -65,4 +65,30 @@ describe('verify-manifest.validateManifest', () => {
     expect(validateManifest({ variants: [validVariant({ mean: [0.5] })] })).not.toEqual([]);
     expect(validateManifest({ variants: [validVariant({ std: [0.2, 0, 0.2] })] })).not.toEqual([]);
   });
+
+  it('rejects an unrecognized outputType', () => {
+    expect(validateManifest({ variants: [validVariant({ outputType: 'garbage' })] })).not.toEqual(
+      [],
+    );
+  });
+
+  it('rejects an out-of-range aiLogitIndex for logits variants', () => {
+    expect(
+      validateManifest({ variants: [validVariant({ outputType: 'logits', aiLogitIndex: 99 })] }),
+    ).not.toEqual([]);
+  });
+
+  it('accepts valid output semantics (logits idx 0/1, p_real)', () => {
+    expect(
+      validateManifest({ variants: [validVariant({ outputType: 'logits', aiLogitIndex: 0 })] }),
+    ).toEqual([]);
+    expect(
+      validateManifest({ variants: [validVariant({ outputType: 'logits', aiLogitIndex: 1 })] }),
+    ).toEqual([]);
+    expect(
+      validateManifest({
+        variants: [validVariant({ outputType: 'p_real', aiLogitIndex: undefined })],
+      }),
+    ).toEqual([]);
+  });
 });

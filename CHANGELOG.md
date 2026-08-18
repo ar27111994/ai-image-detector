@@ -95,9 +95,23 @@ into the v1.0.0 submission.
 - **`npm run models:manifest` works.** Added the previously-missing `tools/verify-manifest.mjs`
   (structural + integrity-pin validation); the script no longer fails with module-not-found.
 
+### Fixed (PR #1 review round 4/5 — lifecycle + manifest semantics)
+
+- **Reset no longer reuses an invalidated download.** `resetModel` clears the in-flight dedup
+  handle (`downloadingModel`) in addition to advancing the generation, so a post-reset
+  `MODEL_DOWNLOAD_START` starts a fresh `ensureModel` instead of awaiting the superseded promise
+  (which would reject SUPERSEDED and leave installation unavailable until the old op settled).
+- **Model-state compare-and-set is airtight.** The generation is re-checked immediately before the
+  synchronous storage write (no interleaving await in the single-threaded SW), and the supersession
+  regression tests are now deterministic (latched, not `setTimeout`-based).
+- **Manifest validator enforces output semantics.** `verify-manifest.mjs` now rejects an
+  unrecognized `outputType` (only `logits`/`p_real`) and an out-of-range `aiLogitIndex` (must be
+  0/1 for logits variants), so a malformed variant can't reach inference and produce a garbage
+  calibrated verdict.
+
 ### Testing
 
-- **454 tests / 35 files** (was 227/24 at v1.0.0). New unit suites for the previously untested
+- **458 tests / 35 files** (was 227/24 at v1.0.0). New unit suites for the previously untested
   popup/options/onboarding pages, the offscreen orchestrator, the service-worker router, and the
   manifest verifier (`tools/verify-manifest.mjs`). Concurrency/stress suites (50-unique and
   50-identical-image stampedes verifying exactly-once inference and cache-collapse, plus

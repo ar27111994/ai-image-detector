@@ -82,7 +82,11 @@ export async function getModelState() {
  */
 async function setModelStateIfCurrent(patch, gen) {
   const state = { ...(await getModelState()), ...patch };
-  if (gen != null && !isActive(gen)) return null; // superseded during the read — drop the write
+  // Supersession is re-checked immediately before the write. The only remaining window is the
+  // synchronous gap between this check and the set() call (no await in between), which cannot
+  // interleave a reset in the single-threaded service worker; a reset can only advance the
+  // generation during the awaited read above, which this check catches.
+  if (gen != null && !isActive(gen)) return null; // superseded — drop the write
   await chrome.storage.local.set({ [STORAGE_KEYS.MODEL_STATE]: state });
   return state;
 }

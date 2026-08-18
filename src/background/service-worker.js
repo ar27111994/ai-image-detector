@@ -480,8 +480,12 @@ async function startModelDownload() {
 }
 
 async function resetModel() {
-  // Invalidate any in-flight download so its late settlement can't repopulate state after reset.
+  // Invalidate any in-flight download so its late settlement can't repopulate state after reset,
+  // AND drop the dedup handle: a post-reset MODEL_DOWNLOAD_START must start a fresh attempt, not
+  // await the now-superseded promise (which would reject with SUPERSEDED and leave installation
+  // unavailable until the old operation settles).
   modelManager.beginModelSetup();
+  downloadingModel = null;
   const { clearModelStore } = await import('../shared/model-store.js');
   await clearModelStore();
   await chrome.storage.local.set({

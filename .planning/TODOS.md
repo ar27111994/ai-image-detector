@@ -34,3 +34,6 @@
       compare-and-set (`setModelStateIfCurrent`), so a superseded download's late `ready` commit
       can't overwrite a reset/replacement even when the generation advances during the final state
       read. Removed the unused `setModelState`.
+- [x] PR #1 review round 5 (2026-08-18): resetModel now clears the in-flight download dedup handle
+      (post-reset start runs a fresh ensureModel, no SUPERSEDED reuse); manifest validator enforces
+      outputType/aiLogitIndex semantics.
