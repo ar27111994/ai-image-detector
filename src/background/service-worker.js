@@ -180,9 +180,31 @@ async function fetchImageBytes(url) {
   if (!response.ok) throw new Error(`image fetch failed: HTTP ${response.status}`);
   const length = Number(response.headers.get('content-length')) || 0;
   if (length > MAX_IMAGE_BYTES) throw new Error(`image too large (${length} bytes)`);
-  const blob = await response.blob();
-  if (blob.size > MAX_IMAGE_BYTES) throw new Error(`image too large (${blob.size} bytes)`);
-  return await blob.arrayBuffer();
+  // Stream with a cumulative cap and cancel on overflow: `response.blob()` would buffer the
+  // entire body before we could measure it, letting a chunked response without Content-Length
+  // exceed the hard cap.
+  const reader = response.body.getReader();
+  const chunks = [];
+  let received = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    received += value.byteLength;
+    if (received > MAX_IMAGE_BYTES) {
+      await reader.cancel().catch(() => {});
+      throw Object.assign(new Error(`image too large (>${MAX_IMAGE_BYTES} bytes)`), {
+        code: 'TOO_LARGE',
+      });
+    }
+    chunks.push(value);
+  }
+  const out = new Uint8Array(received);
+  let offset = 0;
+  for (const c of chunks) {
+    out.set(c, offset);
+    offset += c.length;
+  }
+  return out.buffer;
 }
 
 /* ------------------------------- message routing ------------------------------- */
@@ -305,8 +327,25 @@ async function analyzeByBytes(payload, sender) {
 }
 
 function normalizeBytes(bytes) {
-  if (bytes instanceof ArrayBuffer) return bytes;
-  if (bytes?.data && Array.isArray(bytes.data)) return Uint8Array.from(bytes.data).buffer;
+  // Reject oversized inputs BEFORE copying: a raw ArrayBuffer is already sized, and a
+  // { data: number[] } reports its length without allocating — `Uint8Array.from` would otherwise
+  // copy an arbitrarily large page/JS-supplied array before analysis.
+  if (bytes instanceof ArrayBuffer) {
+    if (bytes.byteLength > MAX_IMAGE_BYTES) {
+      throw Object.assign(new Error(`image too large (${bytes.byteLength} bytes)`), {
+        code: 'TOO_LARGE',
+      });
+    }
+    return bytes;
+  }
+  if (bytes?.data && Array.isArray(bytes.data)) {
+    if (bytes.data.length > MAX_IMAGE_BYTES) {
+      throw Object.assign(new Error(`image too large (${bytes.data.length} bytes)`), {
+        code: 'TOO_LARGE',
+      });
+    }
+    return Uint8Array.from(bytes.data).buffer;
+  }
   return null;
 }
 

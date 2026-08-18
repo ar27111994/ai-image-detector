@@ -279,6 +279,75 @@ describe('model-manager.downloadVariant full flow', () => {
     expect(b).toBe(a + 1);
     expect(c).toBe(b + 1);
   });
+
+  it('enforces the pinned size budget and cancels an overflowing stream', async () => {
+    // Pinned sizeBytes is 3, so the budget is 3 + 1MB tolerance. A stream exceeding that must be
+    // cancelled + rejected mid-read, not buffered whole then hash-rejected.
+    const big = new Uint8Array(2 * 1024 * 1024); // 2MB > (3 + 1MB) budget
+    let cancelled = false;
+    fetchImpl = async () => {
+      const r = streamResponse(big, 64);
+      const rd = r.body.getReader();
+      r.body.getReader = () => ({
+        read: rd.read.bind(rd),
+        cancel: async () => {
+          cancelled = true;
+        },
+      });
+      return r;
+    };
+    await expect(
+      downloadVariant({
+        key: 'm-big',
+        url: 'https://x.test/m.onnx',
+        sha256: 'a'.repeat(64),
+        sizeBytes: 3,
+      }),
+    ).rejects.toThrow(/size budget/i);
+    expect(cancelled).toBe(true);
+    expect(store.get('model.state.v1').status).toBe('error');
+  });
+
+  it('rejects a final size mismatch (truncated/expanded body)', async () => {
+    const bytes = new Uint8Array([1, 2, 3, 4, 5]); // 5 bytes
+    const sha = await sha256Hex(bytes.buffer);
+    fetchImpl = async () => streamResponse(bytes, 5);
+    await expect(
+      downloadVariant({ key: 'm-sm', url: 'https://x.test/m.onnx', sha256: sha, sizeBytes: 3 }),
+    ).rejects.toThrow(/size mismatch/i);
+    expect(store.get('model.state.v1').status).toBe('error');
+  });
+
+  it('a superseded attempt does not publish ready even after its blob write resolves', async () => {
+    // Regression for the post-write gap: supersede mid-`putModelBlob`, then let the write resolve.
+    const bytes = new Uint8Array([9, 9, 9]);
+    const sha = await sha256Hex(bytes.buffer);
+    fetchImpl = async () => streamResponse(bytes, 1);
+
+    // Make putModelBlob's IDB put controllable so we can supersede during the awaited write.
+    const modelStore = await import('../../src/shared/model-store.js');
+    let releasePut;
+    const putSpy = vi.spyOn(modelStore, 'putModelBlob').mockImplementation(
+      () =>
+        new Promise((r) => {
+          releasePut = r;
+        }),
+    );
+
+    const gA = beginModelSetup();
+    const attempt = downloadVariant(
+      { key: 'm-pw', url: 'https://x.test/m.onnx', sha256: sha, sizeBytes: 3 },
+      undefined,
+      gA,
+    );
+    // Wait until the attempt is parked in the awaited put, then supersede + release the write.
+    await new Promise((r) => setTimeout(r, 30));
+    beginModelSetup(); // supersede
+    releasePut();
+    await expect(attempt).rejects.toThrow(/superseded/i);
+    expect(store.get('model.state.v1')?.status).not.toBe('ready');
+    putSpy.mockRestore();
+  });
 });
 
 describe('model-manager.ensureModel bundled fast path', () => {

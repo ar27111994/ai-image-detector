@@ -74,17 +74,38 @@ into the v1.0.0 submission.
 - CodeQL hygiene: removed a dead assignment in the PNG iTXt parser; collapsed a stat-then-read
   TOCTOU window in `tools/pack.mjs` to a single read.
 
+### Fixed (PR #1 review round 3 — input caps + hardening)
+
+- **Superseded model commits fully gated.** The generation check now re-validates after the
+  awaited blob write and before publishing `ready` (in both `downloadVariant` and the bundled fast
+  path), closing the residual race where a reset/replacement during the write let a superseded
+  attempt persist its blob and overwrite the newer state.
+- **Image fetch streams with a hard cap.** `fetchImageBytes` reads the response body in chunks and
+  cancels the moment `MAX_IMAGE_BYTES` is exceeded — a chunked response without `Content-Length`
+  can no longer be buffered unbounded before the size check.
+- **Raw byte messages are size-checked before copying.** `normalizeBytes` rejects oversized
+  ArrayBuffers and `{ data: number[] }` payloads by length _before_ `Uint8Array.from` copies them.
+- **Model download enforces the pinned size.** `downloadVariant` cancels the stream when it exceeds
+  the pinned `sizeBytes` (+1MB tolerance) and rejects a final size mismatch, so a false/missing
+  `Content-Length` can no longer cause an unbounded allocation before SHA-256 rejection.
+- **Build fails without the model manifest.** A missing/unreadable `models/manifest.json` now fails
+  `npm run build` instead of silently shipping an extension that cannot install its model.
+- **`npm run models:manifest` works.** Added the previously-missing `tools/verify-manifest.mjs`
+  (structural + integrity-pin validation); the script no longer fails with module-not-found.
+
 ### Testing
 
-- **439 tests / 34 files** (was 227/24 at v1.0.0). New unit suites for the previously untested
-  popup/options/onboarding pages, the offscreen orchestrator, and the service-worker router
-  (sender auth, cache, stampede dedup, site-disable). Concurrency/stress suites (50-unique and
+- **453 tests / 35 files** (was 227/24 at v1.0.0). New unit suites for the previously untested
+  popup/options/onboarding pages, the offscreen orchestrator, the service-worker router, and the
+  manifest verifier (`tools/verify-manifest.mjs`). Concurrency/stress suites (50-unique and
   50-identical-image stampedes verifying exactly-once inference and cache-collapse, plus
-  concurrent-download dedup, stalled-download-recovery, and superseded-generation tests),
-  adversarial security suites (prototype-pollution, hostile message envelopes, full-pipeline XSS
-  through a hostile A1111 PNG, C2PA UUID-validation), WebGPU session-leak release tests, and
-  edge/corrupt-input parsers. Integration dispatch harness de-flaked (event-driven latch replaces
-  fixed sleeps). Coverage gate ≥90% (98.5/91.0/98.0 measured).
+  concurrent-download dedup, stalled-download-recovery, superseded-generation, and post-write
+  supersession tests), input-cap suites (streamed image overflow cancel, oversized raw-byte
+  rejection, model size-budget cancel + final-size mismatch), adversarial security suites
+  (prototype-pollution, hostile message envelopes, full-pipeline XSS through a hostile A1111 PNG,
+  C2PA UUID-validation), WebGPU session-leak release tests, and edge/corrupt-input parsers.
+  Integration dispatch harness de-flaked (event-driven latch replaces fixed sleeps). Coverage gate
+  ≥90% (98.4/91.1/98.0 measured).
 
 ### Fixed (accuracy documentation)
 

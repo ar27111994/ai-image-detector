@@ -117,10 +117,11 @@ JPEG-recompress/resize augmentations), threshold 0.65:
 
 ```bash
 npm run dev        # watch-mode build
-npm test           # unit + integration tests (<!-- AUTO:TEST_COUNT -->439<!-- /AUTO:TEST_COUNT -->)
+npm test           # unit + integration tests (<!-- AUTO:TEST_COUNT -->453<!-- /AUTO:TEST_COUNT -->)
 npm run cover      # coverage (v8, gated)
 npm run test:e2e   # end-to-end in headless Chrome-for-Testing (7 cases)
 npm run lint       # eslint (blocks CI)
+npm run models:manifest   # validate models/manifest.json (structure + SHA-256 pins)
 node bench/run-pipeline.mjs --model haywoodsloan-int8   # accuracy benchmark (75% gate)
 ```
 

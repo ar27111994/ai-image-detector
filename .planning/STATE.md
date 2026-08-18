@@ -15,9 +15,12 @@
   design-token expansion, DRY refactors (shared math.js, model-variant.js, centralized TIMEOUTS),
   bounded IDB get, offscreen crash recovery, and unit suites for the five previously-untested
   UI/content modules. See CHANGELOG [Unreleased] and .planning/TECH-DEBT.md.
-- Verified gates: npm ci && npm run build && npm test (439 tests / 34 files) && npm run test:e2e
-  (7/7) && npm run lint && npm run format:check && npm run docs:check all pass. Coverage 98.5%
-  lines / 91.0% branches / 98.0% functions (90% gate). Docs auto-synced via tools/sync-docs.mjs.
+- Verified gates: npm ci && npm run build && npm test (453 tests / 35 files) && npm run test:e2e
+  (7/7) && npm run lint && npm run format:check && npm run docs:check all pass. Coverage 98.4%
+  lines / 91.1% branches / 98.0% functions (90% gate). Docs auto-synced via tools/sync-docs.mjs.
+- PR #1 review round 3 (6 threads): fixed post-write supersession gap, streamed image-fetch cap,
+  raw-byte pre-copy size check, model size-budget cancel + final-size check, build fails without
+  the manifest, and added the missing tools/verify-manifest.mjs behind `npm run models:manifest`.
 - PR #1 review round 2 (14 unresolved threads): fixed threshold-not-applied (now threaded + cache
   key includes it), options MODEL_RESET protocol bug, C2PA UUID-validation (anti-forgery), full-
   buffer image hash, bounded getAllKeys, superseded-download generation token, dependabot auto-

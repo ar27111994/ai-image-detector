@@ -65,12 +65,8 @@ beforeEach(async () => {
     }
     return { id: msg.id, ok: true, result: {} };
   };
-  // SW reads image bytes for analyze-by-url via fetch(); return our fake image.
-  globalThis.fetch = vi.fn(async () => ({
-    ok: true,
-    headers: { get: () => null },
-    blob: async () => ({ size: 16, arrayBuffer: async () => fakeImageBytes() }),
-  }));
+  // SW reads image bytes for analyze-by-url via fetch(); return our fake image (streaming body).
+  globalThis.fetch = vi.fn(async () => streamFetchResponse(fakeImageBytes()));
 
   chromeStub.chrome.runtime.onMessage.addListener = (fn) => {
     listener = fn;
@@ -83,6 +79,28 @@ beforeEach(async () => {
   vi.resetModules();
   await import('../../src/background/service-worker.js');
 });
+
+/** A fetch() Response stub whose body streams `buffer` in chunks (matches fetchImageBytes). */
+function streamFetchResponse(buffer, { contentLength = null } = {}) {
+  const bytes = new Uint8Array(buffer);
+  return {
+    ok: true,
+    headers: { get: (h) => (h === 'content-length' ? contentLength : null) },
+    body: {
+      getReader: () => {
+        let i = 0;
+        const chunk = 8192;
+        return {
+          read: async () =>
+            i < bytes.length
+              ? { done: false, value: bytes.slice(i, (i += chunk)) }
+              : { done: true, value: undefined },
+          cancel: async () => {},
+        };
+      },
+    },
+  };
+}
 
 const pageSender = { id: 'test-ext-id', url: 'https://site.example/page', tab: { id: 1 } };
 
@@ -100,18 +118,9 @@ describe('service-worker router', () => {
   });
 
   it('caches analysis results by content hash (second identical request is a cache hit)', async () => {
-    globalThis.fetch = vi.fn(async () => ({
-      ok: true,
-      headers: { get: () => null },
-      blob: async () => ({ size: 16, arrayBuffer: async () => fakeImageBytes().slice(0) }),
-    }));
-    // Force both requests to use the SAME bytes by pinning the counter.
+    // Force both requests to use the SAME bytes.
     const fixed = fakeImageBytes();
-    globalThis.fetch = vi.fn(async () => ({
-      ok: true,
-      headers: { get: () => null },
-      blob: async () => ({ size: fixed.byteLength, arrayBuffer: async () => fixed.slice(0) }),
-    }));
+    globalThis.fetch = vi.fn(async () => streamFetchResponse(fixed));
 
     const first = await dispatch(
       req(MSG.ANALYZE_IMAGE, { url: 'https://cdn.example/a.png' }),
@@ -129,11 +138,7 @@ describe('service-worker router', () => {
 
   it('deduplicates concurrent identical analyses into one inference call', async () => {
     const fixed = fakeImageBytes();
-    globalThis.fetch = vi.fn(async () => ({
-      ok: true,
-      headers: { get: () => null },
-      blob: async () => ({ size: fixed.byteLength, arrayBuffer: async () => fixed.slice(0) }),
-    }));
+    globalThis.fetch = vi.fn(async () => streamFetchResponse(fixed));
     const url = 'https://cdn.example/dup.png';
     const [a, b, c] = await Promise.all([
       dispatch(req(MSG.ANALYZE_IMAGE, { url }), pageSender),
@@ -242,11 +247,9 @@ describe('service-worker router', () => {
   });
 
   it('rejects an oversized image by content-length before reading the body', async () => {
-    globalThis.fetch = vi.fn(async () => ({
-      ok: true,
-      headers: { get: () => String(64 * 1024 * 1024) }, // 64MB > 32MB cap
-      blob: async () => ({ size: 64 * 1024 * 1024, arrayBuffer: async () => new ArrayBuffer(8) }),
-    }));
+    globalThis.fetch = vi.fn(async () =>
+      streamFetchResponse(new ArrayBuffer(8), { contentLength: String(64 * 1024 * 1024) }),
+    );
     const res = await dispatch(
       req(MSG.ANALYZE_IMAGE, { url: 'https://cdn.example/huge.png' }),
       pageSender,
@@ -256,18 +259,42 @@ describe('service-worker router', () => {
     expect(offscreenCalls).toBe(0);
   });
 
-  it('rejects an oversized image by actual blob size (no content-length)', async () => {
-    globalThis.fetch = vi.fn(async () => ({
-      ok: true,
-      headers: { get: () => null },
-      blob: async () => ({ size: 64 * 1024 * 1024, arrayBuffer: async () => new ArrayBuffer(8) }),
-    }));
+  it('rejects an oversized image streamed past the cap (no content-length)', async () => {
+    const { MAX_IMAGE_BYTES } = await import('../../src/shared/constants.js');
+    // A chunked response with no Content-Length that overflows the cap mid-stream must be
+    // cancelled and rejected, not buffered whole then measured.
+    const oversized = new Uint8Array(MAX_IMAGE_BYTES + 1024);
+    globalThis.fetch = vi.fn(async () => streamFetchResponse(oversized));
     const res = await dispatch(
       req(MSG.ANALYZE_IMAGE, { url: 'https://cdn.example/huge2.png' }),
       pageSender,
     );
     expect(res.ok).toBe(false);
     expect(res.error.message).toMatch(/too large/);
+    expect(offscreenCalls).toBe(0);
+  });
+
+  it('rejects oversized raw bytes before copying (ANALYZE_IMAGE_BYTES)', async () => {
+    const { MAX_IMAGE_BYTES } = await import('../../src/shared/constants.js');
+    const res = await dispatch(
+      req(MSG.ANALYZE_IMAGE_BYTES, { bytes: new ArrayBuffer(MAX_IMAGE_BYTES + 1) }),
+      pageSender,
+    );
+    expect(res.ok).toBe(false);
+    expect(res.error.code).toBe('TOO_LARGE');
+    expect(offscreenCalls).toBe(0);
+  });
+
+  it('rejects an oversized { data: number[] } payload by length before copying', async () => {
+    const { MAX_IMAGE_BYTES } = await import('../../src/shared/constants.js');
+    // A real array just over the cap: length is checked before any element copy.
+    const res = await dispatch(
+      req(MSG.ANALYZE_IMAGE_BYTES, { bytes: { data: new Array(MAX_IMAGE_BYTES + 1).fill(0) } }),
+      pageSender,
+    );
+    expect(res.ok).toBe(false);
+    expect(res.error.code).toBe('TOO_LARGE');
+    expect(offscreenCalls).toBe(0);
   });
 
   it('skips data:/blob: URLs on the by-url path (bytes required instead)', async () => {
@@ -379,11 +406,7 @@ describe('service-worker router', () => {
 
   it('GET_TAB_STATS returns per-tab tallies after an analysis', async () => {
     const fixed = fakeImageBytes();
-    globalThis.fetch = vi.fn(async () => ({
-      ok: true,
-      headers: { get: () => null },
-      blob: async () => ({ size: 16, arrayBuffer: async () => fixed.slice(0) }),
-    }));
+    globalThis.fetch = vi.fn(async () => streamFetchResponse(fixed));
     await dispatch(req(MSG.ANALYZE_IMAGE, { url: 'https://cdn.example/stat.png' }), pageSender);
     const res = await dispatch(req(MSG.GET_TAB_STATS, { tabId: 1 }), pageSender);
     expect(res.ok).toBe(true);
@@ -430,11 +453,7 @@ describe('service-worker router', () => {
 
   it("resets a tab's stats when the tab reloads (onUpdated loading)", async () => {
     const fixed = fakeImageBytes();
-    globalThis.fetch = vi.fn(async () => ({
-      ok: true,
-      headers: { get: () => null },
-      blob: async () => ({ size: 16, arrayBuffer: async () => fixed.slice(0) }),
-    }));
+    globalThis.fetch = vi.fn(async () => streamFetchResponse(fixed));
     let updatedHandler;
     chromeStub.chrome.tabs.onUpdated = { addListener: (fn) => (updatedHandler = fn) };
     vi.resetModules();
@@ -450,11 +469,7 @@ describe('service-worker router', () => {
 
   it("drops a closed tab's stats (onRemoved)", async () => {
     const fixed = fakeImageBytes();
-    globalThis.fetch = vi.fn(async () => ({
-      ok: true,
-      headers: { get: () => null },
-      blob: async () => ({ size: 16, arrayBuffer: async () => fixed.slice(0) }),
-    }));
+    globalThis.fetch = vi.fn(async () => streamFetchResponse(fixed));
     let removedHandler;
     chromeStub.chrome.tabs.onRemoved = { addListener: (fn) => (removedHandler = fn) };
     vi.resetModules();

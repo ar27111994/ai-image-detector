@@ -79,14 +79,12 @@ async function copyStatic() {
   }
   await verifyOrtVersionCoupling();
 
-  // Model manifest (URLs + SHA-256 of weights; weights themselves download at first-run setup)
+  // Model manifest (URLs + SHA-256 of weights; weights themselves download at first-run setup).
+  // The manifest is mandatory: without it the built extension reaches onboarding but cannot
+  // install a model, so a missing/unreadable manifest must fail the build, not silently pass.
   const modelsManifest = path.join(repoRoot, 'models', 'manifest.json');
-  try {
-    await mkdir(path.join(distDir, 'models'), { recursive: true });
-    await copyFile(modelsManifest, path.join(distDir, 'models', 'manifest.json'));
-  } catch {
-    console.warn('[build] models/manifest.json not found yet — skipping (added in Phase 1 task 3)');
-  }
+  await mkdir(path.join(distDir, 'models'), { recursive: true });
+  await copyFile(modelsManifest, path.join(distDir, 'models', 'manifest.json'));
 }
 
 /**

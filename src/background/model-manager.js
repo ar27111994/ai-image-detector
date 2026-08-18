@@ -143,6 +143,10 @@ export async function downloadVariant(variantSpec, onProgress, gen = null) {
     throw new Error(`model download failed: HTTP ${response.status}`);
   }
 
+  // Enforce the pinned size budget while streaming: a missing or false Content-Length (or a
+  // hostile endpoint) must not let the service worker retain an arbitrarily large response
+  // before integrity rejection. Cancel the stream the moment the cap is exceeded.
+  const MAX_MODEL_BYTES = (sizeBytes ?? 0) + 1024 * 1024; // pinned size + 1MB tolerance
   const total = Number(response.headers.get('content-length')) || sizeBytes || 0;
   const reader = response.body.getReader();
   const chunks = [];
@@ -151,8 +155,15 @@ export async function downloadVariant(variantSpec, onProgress, gen = null) {
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
-    chunks.push(value);
     received += value.byteLength;
+    if (received > MAX_MODEL_BYTES) {
+      await reader.cancel().catch(() => {});
+      await commitState({ status: 'error', error: 'download exceeded size budget' });
+      throw Object.assign(new Error('model download exceeded the pinned size budget'), {
+        code: 'SIZE_OVERFLOW',
+      });
+    }
+    chunks.push(value);
     const now = Date.now();
     if (now - lastReport > 250) {
       lastReport = now;
@@ -166,6 +177,14 @@ export async function downloadVariant(variantSpec, onProgress, gen = null) {
         broadcastProgress(state);
       }
     }
+  }
+
+  // Final size must match the pinned size exactly (defends against a truncated/expanded body).
+  if (sizeBytes && received !== sizeBytes) {
+    await commitState({ status: 'error', error: `size mismatch: ${received} != ${sizeBytes}` });
+    throw Object.assign(new Error(`model size mismatch: expected ${sizeBytes}, got ${received}`), {
+      code: 'SIZE_MISMATCH',
+    });
   }
 
   const blob = new Blob(chunks, { type: 'application/octet-stream' });
@@ -182,6 +201,10 @@ export async function downloadVariant(variantSpec, onProgress, gen = null) {
 
   throwIfSuperseded(); // don't persist a stale blob over a newer attempt
   await putModelBlob(key, blob);
+  // Revalidate after the awaited write: a reset/replacement may have advanced the generation
+  // while the blob write was pending. A superseded attempt must not publish `ready` over the
+  // newer state even though its blob was already written.
+  throwIfSuperseded();
   const state = await setModelState({
     status: 'ready',
     progress: 1,
@@ -258,6 +281,12 @@ export async function ensureModel(epPreference, onProgress, gen = null) {
       });
     }
     await putModelBlob(variant.key, bundled);
+    // Revalidate after the awaited write before publishing ready.
+    if (gen != null && !isActive(gen)) {
+      throw Object.assign(new Error('superseded by a newer model download'), {
+        code: 'SUPERSEDED',
+      });
+    }
     const state = await setModelState({
       status: 'ready',
       progress: 1,
