@@ -152,6 +152,30 @@ describe('xmp.detectXmpAiSignatures', () => {
     ]);
     expect(hit).toBe(false);
   });
+
+  it('does NOT treat trainedAlgorithmicMedia in a random description as a DigitalSourceType claim', () => {
+    // Adversarial: the term appears in an unrelated dc:description, not as the IPTC
+    // DigitalSourceType property — must not force a definitive AI verdict.
+    const { hit } = detectXmpAiSignatures([
+      '<x:xmpmeta><dc:description><rdf:li>A note about trainedAlgorithmicMedia detectors</rdf:li></dc:description></x:xmpmeta>',
+    ]);
+    expect(hit).toBe(false);
+  });
+
+  it('flags trainedAlgorithmicMedia as a DigitalSourceType attribute', () => {
+    const { hit, digitalSourceType } = detectXmpAiSignatures([
+      '<x:xmpmeta><rdf:Description Iptc4xmpCore:DigitalSourceType="trainedAlgorithmicMedia"/></x:xmpmeta>',
+    ]);
+    expect(hit).toBe(true);
+    expect(digitalSourceType).toBe('trainedAlgorithmicMedia');
+  });
+
+  it('flags trainedAlgorithmicMedia inside a DigitalSourceType rdf:li container', () => {
+    const { hit } = detectXmpAiSignatures([
+      '<x:xmpmeta><Iptc4xmpCore:DigitalSourceType><rdf:Seq><rdf:li>trainedAlgorithmicMedia</rdf:li></rdf:Seq></Iptc4xmpCore:DigitalSourceType></x:xmpmeta>',
+    ]);
+    expect(hit).toBe(true);
+  });
 });
 
 describe('c2pa.detectC2pa', () => {

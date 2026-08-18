@@ -133,10 +133,17 @@ into the v1.0.0 submission.
 - **Manifest `sizeBytes` is now mandatory** in `verify-manifest.mjs`. The download path computes its
   hard cap as `(sizeBytes ?? 0) + 1MB`, so a variant accepted without it would cap the download at
   1MB and reject any normal model during setup.
+- **EXIF generator-name matching is restricted to software-identifying fields** (`Software` /
+  `CreatorTool`). A camera photo credited to an artist named "Leonardo" (or with an
+  `ImageDescription` mentioning a generator) no longer becomes a definitive AI hit.
+- **XMP `trainedAlgorithmicMedia` requires the DigitalSourceType property.** The term must appear as
+  the IPTC `DigitalSourceType` value (attribute, `rdf:li` inside a DigitalSourceType container, or
+  the IPTC controlled-vocabulary URI) — a bare occurrence in an unrelated description/comment no
+  longer forces a 0.99 verdict.
 
 ### Testing
 
-- **463 tests / 35 files** (was 227/24 at v1.0.0). New unit suites for the previously untested
+- **468 tests / 35 files** (was 227/24 at v1.0.0). New unit suites for the previously untested
   popup/options/onboarding pages, the offscreen orchestrator, the service-worker router, and the
   manifest verifier (`tools/verify-manifest.mjs`). Concurrency/stress suites (50-unique and
   50-identical-image stampedes verifying exactly-once inference and cache-collapse, plus

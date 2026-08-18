@@ -116,7 +116,8 @@ describe('png-text extractPngText decode paths', () => {
 
 describe('xmp extractXmpPackets', () => {
   it('extracts XMP from a JPEG APP1 segment', () => {
-    const xmp = '<x:xmpmeta>trainedAlgorithmicMedia</x:xmpmeta>';
+    const xmp =
+      '<x:xmpmeta><rdf:Description Iptc4xmpCore:DigitalSourceType="trainedAlgorithmicMedia"/></x:xmpmeta>';
     const payload = new Uint8Array([
       ...enc.encode('http://ns.adobe.com/xap/1.0/'),
       0,

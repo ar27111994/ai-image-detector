@@ -85,12 +85,15 @@ export async function analyzeExif(buffer, format) {
   const aiSignals = [];
   const hasCameraFields = CAMERA_FIELDS.some((f) => parsed[f] !== undefined && parsed[f] !== null);
 
-  const textFields = [parsed.Software, parsed.CreatorTool, parsed.Artist, parsed.ImageDescription]
+  // Bare generator-name matching is restricted to fields that actually identify the producing
+  // software (Software / CreatorTool). Artist and ImageDescription are free-text — a real photo
+  // credited to an artist named "Leonardo" must not become a definitive AI hit.
+  const softwareFields = [parsed.Software, parsed.CreatorTool]
     .filter((v) => typeof v === 'string')
     .map((v) => v.toLowerCase());
   const software = typeof parsed.Software === 'string' ? parsed.Software : null;
 
-  for (const text of textFields) {
+  for (const text of softwareFields) {
     const hit = AI_SOFTWARE_TAGS.find((s) => text.includes(s));
     if (hit) {
       aiSignals.push(`exif: software tag references "${hit}"`);

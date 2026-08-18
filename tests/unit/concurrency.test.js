@@ -52,12 +52,14 @@ describe('concurrency: content hashing is stable and order-independent', () => {
 });
 
 describe('stress: hashing large payloads', () => {
-  it('imageContentKey handles a 32MB buffer quickly (sampled, not O(n) hash)', async () => {
+  it('imageContentKey hashes the full 32MB buffer (collision-resistant) in reasonable time', async () => {
     const big = new Uint8Array(32 * 1024 * 1024).buffer;
     const t0 = performance.now();
     const key = await imageContentKey(big);
     const ms = performance.now() - t0;
     expect(key).toBeTruthy();
-    expect(ms).toBeLessThan(500); // sampled windows => sub-linear
+    // Full-buffer SHA-256 (collision-resistant by design; the cache key decides verdict sharing).
+    // WebCrypto does this at ~GB/s; 5s is a generous bound that still catches a pathological blowup.
+    expect(ms).toBeLessThan(5000);
   });
 });

@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { analyzeExif } from '../../src/shared/metadata/exif.js';
 
-// Build a minimal JPEG APP1 EXIF segment with a Software tag.
-function jpegWithExifSoftware(software) {
+// Build a minimal JPEG APP1 EXIF segment with one ASCII tag (default Software 0x0131).
+function jpegWithExifTag(text, tagId = 0x0131) {
   const enc = new TextEncoder();
-  // TIFF header (little-endian) + IFD0 with one entry: Software (0x0131, ASCII)
-  const softBytes = [...enc.encode(software), 0];
+  // TIFF header (little-endian) + IFD0 with one ASCII entry.
+  const softBytes = [...enc.encode(text), 0];
   const ifdOffset = 8;
   const entryCount = 1;
   const valueOffset = ifdOffset + 2 + entryCount * 12 + 4;
@@ -20,8 +20,8 @@ function jpegWithExifSoftware(software) {
     0, // IFD0 offset
     entryCount & 0xff,
     0, // 1 entry
-    0x31,
-    0x01, // tag 0x0131 Software
+    tagId & 0xff,
+    (tagId >>> 8) & 0xff, // tag id (little-endian)
     0x02,
     0x00, // type ASCII
     softBytes.length & 0xff,
@@ -54,6 +54,10 @@ function jpegWithExifSoftware(software) {
   ];
   return new Uint8Array(bytes).buffer;
 }
+
+const jpegWithExifSoftware = (software) => jpegWithExifTag(software, 0x0131);
+// EXIF Artist tag is 0x013b; ImageDescription is 0x010e.
+const jpegWithExifArtist = (artist) => jpegWithExifTag(artist, 0x013b);
 
 describe('exif.analyzeExif', () => {
   it('flags AI software tag (Midjourney)', async () => {
@@ -106,6 +110,21 @@ describe('exif.analyzeExif', () => {
     const jpeg = jpegWithExifSoftware('Stable Diffusion');
     const out = await analyzeExif(jpeg, 'jpeg');
     expect(out.aiSignals.join(' ')).toMatch(/stable diffusion/i);
+  });
+
+  it('does NOT flag a camera photo credited to an artist named "Leonardo"', async () => {
+    // Regression: bare generator-name matching must be restricted to software-identifying fields.
+    // A real photo with EXIF Artist="Leonardo" is not an AI hit (Leonardo.ai is a generator, but
+    // the Artist field is a person's name, not software).
+    const jpeg = jpegWithExifArtist('Leonardo');
+    const out = await analyzeExif(jpeg, 'jpeg');
+    expect(out.aiSignals).toEqual([]);
+  });
+
+  it('still flags a generator name when it appears in the Software field', async () => {
+    const jpeg = jpegWithExifSoftware('Leonardo');
+    const out = await analyzeExif(jpeg, 'jpeg');
+    expect(out.aiSignals.join(' ')).toMatch(/leonardo/i);
   });
 
   it('returns the indeterminate state for a format without an EXIF container (png->null path)', async () => {

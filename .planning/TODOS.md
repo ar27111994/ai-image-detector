@@ -43,6 +43,10 @@
       dedup handle (identity check); convert_ateeqq.py defaults to the configured image size with
       interpolate_pos_encoding on export + validation.
 - [x] PR #1 review round 7 (2026-08-18): reset is authoritative over a concurrent download start —
-      `resetModel` advances the generation before clearing the dedup handle, and `ensureModel`
-      re-checks supersession after its awaited readiness read, so a start that observed pre-reset
-      `ready` rejects SUPERSEDED instead of reporting `alreadyReady` for a removed model.
+      `resetModel` advances the generation before clearing the dedup handle, `ensureModel` re-checks
+      supersession after its awaited readiness read, and an in-flight reset is a barrier new starts
+      await. CodeQL missing-await on the identity-guard dismissed as FP.
+- [x] PR #1 review round 8 (2026-08-18): forensic false-positive hardening — EXIF generator-name
+      matching restricted to Software/CreatorTool (an Artist named "Leonardo" is no longer a hit),
+      and XMP trainedAlgorithmicMedia requires the IPTC DigitalSourceType property (attribute /
+      rdf:li container / controlled-vocabulary URI), not a bare term anywhere in the XML.
