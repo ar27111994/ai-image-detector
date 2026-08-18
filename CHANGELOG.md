@@ -143,7 +143,9 @@ into the v1.0.0 submission.
   attribute/container, so the full URI appearing only in `dc:description` text is not a claim.
 - **XMP DigitalSourceType matching requires the exact property name.** The matchers are anchored so a
   foreign property that merely _ends_ in `DigitalSourceType` (e.g. `ex:NotDigitalSourceType`) no
-  longer produces a definitive AI signal.
+  longer produces a definitive AI signal. The value is now extracted structurally and compared
+  exactly (bare value or its controlled-vocabulary URI): a foreign namespace (`ex:DigitalSourceType`)
+  is not the IPTC property, and a substring like `nottrainedAlgorithmicMedia` is rejected.
 - **EXIF A1111 geninfo requires a structured combination.** A genuine block carries ≥3 distinct fields
   (Steps + Sampler + CFG scale/Seed/Model hash); a single generic token like "Steps: walk to the
   viewpoint" is an ordinary comment, not geninfo.
@@ -156,7 +158,7 @@ into the v1.0.0 submission.
 
 ### Testing
 
-- **<!-- AUTO:TEST_COUNT -->476<!-- /AUTO:TEST_COUNT --> tests / <!-- AUTO:TEST_FILES -->35<!-- /AUTO:TEST_FILES --> files** (was 227/24 at v1.0.0). New unit suites for the previously untested
+- **476 tests / 35 files** (was 227/24 at v1.0.0). New unit suites for the previously untested
   popup/options/onboarding pages, the offscreen orchestrator, the service-worker router, and the
   manifest verifier (`tools/verify-manifest.mjs`). Concurrency/stress suites (50-unique and
   50-identical-image stampedes verifying exactly-once inference and cache-collapse, plus

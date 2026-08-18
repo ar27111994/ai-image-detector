@@ -12,6 +12,33 @@ const XMP_JPEG_PREFIX = 'http://ns.adobe.com/xap/1.0/';
 /** IPTC DigitalSourceType values that indicate generative-AI content. */
 const AI_DIGITAL_SOURCE_TYPES = ['trainedAlgorithmicMedia', 'compositeWithTrainedAlgorithmicMedia'];
 
+/**
+ * IPTC namespace prefix for the DigitalSourceType property. Only `Iptc4xmpCore:` (the canonical
+ * IPTC Photo Metadata namespace) or the intentionally-supported unqualified `DigitalSourceType`
+ * are accepted — a foreign namespace (e.g. `ex:DigitalSourceType`) is NOT the IPTC property.
+ */
+const DST_PROPERTY = '(?:Iptc4xmpCore:)?DigitalSourceType';
+
+/**
+ * The full controlled-vocabulary URI for a DigitalSourceType value, used to accept the CV-URI form
+ * in addition to the bare value.
+ * @param {string} dst one of AI_DIGITAL_SOURCE_TYPES
+ * @returns {string} the controlled-vocabulary URI for the value
+ */
+const CV_URI = (dst) => `http://cv.iptc.org/newscodes/digitalsourcetype/${dst}`;
+
+/**
+ * True when `value` is exactly the AI DigitalSourceType value `dst` — the bare value, or the exact
+ * controlled-vocabulary URI for it. Substrings (e.g. "nottrainedAlgorithmicMedia") are rejected.
+ * @param {string} value the extracted DigitalSourceType value
+ * @param {string} dst one of AI_DIGITAL_SOURCE_TYPES
+ * @returns {boolean}
+ */
+function isExactDstValue(value, dst) {
+  const v = value.trim();
+  return v === dst || v === CV_URI(dst);
+}
+
 const AI_CREATOR_TOOLS = [
   'midjourney',
   'adobe firefly',
@@ -64,27 +91,26 @@ export function detectXmpAiSignatures(packets) {
   const signals = [];
   let digitalSourceType = null;
   for (const xml of packets) {
-    // Match a DigitalSourceType value only when it belongs to the IPTC DigitalSourceType property
-    // (attribute form `Iptc4xmpCore:DigitalSourceType="…"` / `digitalSourceType="…"`, or an rdf:li
-    // inside a DigitalSourceType container). A bare occurrence in an unrelated description/comment
-    // must not force a definitive AI verdict.
-    for (const dst of AI_DIGITAL_SOURCE_TYPES) {
-      // Attribute form: an EXACT `…:DigitalSourceType="…"` or unqualified `DigitalSourceType="…"`
-      // (a name that merely ENDS in DigitalSourceType, e.g. ex:NotDigitalSourceType, must not match).
-      // `(?:^|[\s<])` anchors the property name so a longer qualified name can't suffix-match.
-      const attrRe = new RegExp(
-        `(?:^|[\\s<])(?:[A-Za-z0-9]+:)?DigitalSourceType\\s*=\\s*"[^"]*${dst}`,
-        'i',
-      );
-      // Container form: an rdf:li inside an exact DigitalSourceType element, holding the bare value
-      // or the controlled-vocabulary URI.
-      const liRe = new RegExp(
-        `<(?:[A-Za-z0-9]+:)?DigitalSourceType[^>]*>[\\s\\S]*?<rdf:li>[^<]*${dst}[^<]*<\\/rdf:li>`,
-        'i',
-      );
-      if (attrRe.test(xml) || liRe.test(xml)) {
-        digitalSourceType = dst;
-        signals.push(`xmp:DigitalSourceType=${dst}`);
+    // Extract DigitalSourceType only from the exact IPTC property: the qualified
+    // `Iptc4xmpCore:DigitalSourceType` or the intentionally-supported unqualified `DigitalSourceType`.
+    // A foreign namespace (ex:DigitalSourceType) or a longer name ending in DigitalSourceType
+    // (ex:NotDigitalSourceType) is NOT the IPTC property, and a bare occurrence in an unrelated
+    // description/comment is not a claim. The extracted value must equal the AI value exactly
+    // (or its controlled-vocabulary URI) — substrings like "nottrainedAlgorithmicMedia" are rejected.
+    const attrRe = new RegExp(`(?:^|[\\s<])${DST_PROPERTY}\\s*=\\s*"([^"]*)"`, 'gi');
+    const liRe = new RegExp(`<${DST_PROPERTY}[^>]*>([\\s\\S]*?)<\\/${DST_PROPERTY}>`, 'gi');
+    const candidates = [];
+    for (const m of xml.matchAll(attrRe)) candidates.push(m[1]);
+    for (const m of xml.matchAll(liRe)) {
+      // The container's value is the text of its rdf:li item(s).
+      for (const li of m[1].matchAll(/<rdf:li[^>]*>([^<]*)<\/rdf:li>/gi)) candidates.push(li[1]);
+    }
+    for (const value of candidates) {
+      for (const dst of AI_DIGITAL_SOURCE_TYPES) {
+        if (isExactDstValue(value, dst)) {
+          digitalSourceType = dst;
+          signals.push(`xmp:DigitalSourceType=${dst}`);
+        }
       }
     }
     const lower = xml.toLowerCase();

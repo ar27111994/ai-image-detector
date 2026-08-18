@@ -206,6 +206,32 @@ describe('xmp.detectXmpAiSignatures', () => {
     ]);
     expect(hit).toBe(false);
   });
+
+  it('rejects a foreign NAMESPACE on DigitalSourceType (ex: prefix is not IPTC)', () => {
+    // Only Iptc4xmpCore: (or the intentionally-supported unqualified name) is the IPTC property.
+    const { hit: attrHit } = detectXmpAiSignatures([
+      '<x:xmpmeta><rdf:Description ex:DigitalSourceType="trainedAlgorithmicMedia"/></x:xmpmeta>',
+    ]);
+    expect(attrHit).toBe(false);
+    const { hit: containerHit } = detectXmpAiSignatures([
+      '<x:xmpmeta><ex:DigitalSourceType><rdf:Seq><rdf:li>trainedAlgorithmicMedia</rdf:li></rdf:Seq></ex:DigitalSourceType></x:xmpmeta>',
+    ]);
+    expect(containerHit).toBe(false);
+  });
+
+  it('rejects a substring value (nottrainedAlgorithmicMedia is not the CV value)', () => {
+    const { hit } = detectXmpAiSignatures([
+      '<x:xmpmeta><rdf:Description Iptc4xmpCore:DigitalSourceType="nottrainedAlgorithmicMedia"/></x:xmpmeta>',
+    ]);
+    expect(hit).toBe(false);
+  });
+
+  it('accepts the exact controlled-vocabulary URI as the property value', () => {
+    const { hit } = detectXmpAiSignatures([
+      '<x:xmpmeta><rdf:Description Iptc4xmpCore:DigitalSourceType="http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia"/></x:xmpmeta>',
+    ]);
+    expect(hit).toBe(true);
+  });
 });
 
 describe('c2pa.detectC2pa', () => {
