@@ -61,6 +61,12 @@ describe('verify-manifest.validateManifest', () => {
     expect(validateManifest({ variants: [validVariant({ inputSize: 0 })] })).not.toEqual([]);
   });
 
+  it('rejects a variant missing sizeBytes (download cap would fall to 1MB)', () => {
+    const v = validVariant();
+    delete v.sizeBytes;
+    expect(validateManifest({ variants: [v] })).not.toEqual([]);
+  });
+
   it('rejects malformed mean/std', () => {
     expect(validateManifest({ variants: [validVariant({ mean: [0.5] })] })).not.toEqual([]);
     expect(validateManifest({ variants: [validVariant({ std: [0.2, 0, 0.2] })] })).not.toEqual([]);

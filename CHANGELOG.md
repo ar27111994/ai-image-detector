@@ -124,10 +124,13 @@ into the v1.0.0 submission.
   ONNX export and the reference validation with `interpolate_pos_encoding` when a non-configured
   size is requested — SigLIP's fixed positional embeddings otherwise cause a patch/position shape
   mismatch at export/validation.
+- **Manifest `sizeBytes` is now mandatory** in `verify-manifest.mjs`. The download path computes its
+  hard cap as `(sizeBytes ?? 0) + 1MB`, so a variant accepted without it would cap the download at
+  1MB and reject any normal model during setup.
 
 ### Testing
 
-- **460 tests / 35 files** (was 227/24 at v1.0.0). New unit suites for the previously untested
+- **461 tests / 35 files** (was 227/24 at v1.0.0). New unit suites for the previously untested
   popup/options/onboarding pages, the offscreen orchestrator, the service-worker router, and the
   manifest verifier (`tools/verify-manifest.mjs`). Concurrency/stress suites (50-unique and
   50-identical-image stampedes verifying exactly-once inference and cache-collapse, plus

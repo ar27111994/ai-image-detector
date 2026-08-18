@@ -50,8 +50,11 @@ export function validateManifest(manifest) {
     if (typeof v.sha256 !== 'string' || !SHA256_RE.test(v.sha256)) {
       problems.push(`${where}: sha256 must be 64 hex chars`);
     }
-    if (v.sizeBytes != null && (!Number.isInteger(v.sizeBytes) || v.sizeBytes <= 0)) {
-      problems.push(`${where}: sizeBytes must be a positive integer`);
+    // sizeBytes is MANDATORY: the download path computes its hard cap as `(sizeBytes ?? 0) + 1MB`,
+    // so a variant accepted without it would cap the download at 1MB and reject any normal model
+    // during setup. Always require a positive integer.
+    if (!Number.isInteger(v.sizeBytes) || v.sizeBytes <= 0) {
+      problems.push(`${where}: sizeBytes is required and must be a positive integer`);
     }
     if (!Number.isInteger(v.inputSize) || v.inputSize <= 0) {
       problems.push(`${where}: inputSize must be a positive integer`);
