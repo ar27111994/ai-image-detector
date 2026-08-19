@@ -78,3 +78,7 @@
       resolved at each property's start-tag position, so a later sibling rebinding a prefix doesn't
       change an earlier property); removed the unused contextMenus manifest permission; MODEL.md
       describes the raw-logit quantization gate; STATE.md accuracy figures corrected to canonical.
+- [x] PR #1 review round 17 (2026-08-19): XMP detection now uses a real namespace-aware XML parser
+      (linkedom, ISC — added as a runtime dep, bundled into offscreen.js) with an element-scoped
+      namespace stack, so element-scoped rebindings and quoted `>` in attribute values are handled
+      correctly. NOTICE updated.

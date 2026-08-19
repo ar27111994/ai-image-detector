@@ -14,8 +14,8 @@ into the v1.0.0 submission.
 ### Added (compliance, security, CI)
 
 - **NOTICE** file (REQ-21): licenses for every bundled third-party component — onnxruntime-web,
-  exifr, fft.js (all MIT) and the haywoodsloan detection model (Apache-2.0). `LICENSE` + `NOTICE`
-  now ship inside `dist/`.
+  exifr, fft.js (all MIT), linkedom (ISC), and the haywoodsloan detection model (Apache-2.0).
+  `LICENSE` + `NOTICE` now ship inside `dist/`.
 - **CodeQL** workflow (security-and-quality, SHA-pinned, weekly + per-push/PR).
 - **Release gates**: tag must be valid semver and match `package.json`/`manifest.json`; clean-tree
   check; `release/SHA256SUMS` generated for every published artifact and attached to the release.
@@ -194,9 +194,12 @@ into the v1.0.0 submission.
 
 ### Fixed (PR #1 review round 15 — namespace scoping + manifest hygiene + docs)
 
-- **XMP namespace resolution is element-scoped.** Bindings are resolved at each property's own
-  start-tag position, so a later sibling rebinding a prefix no longer changes how an earlier
-  `DigitalSourceType`/`CreatorTool` resolves (and vice versa).
+- **XMP detection uses a real namespace-aware XML parser.** Replaced the hand-rolled regex matcher
+  with `linkedom` (ISC) + an element-scoped namespace stack: prefixes resolve against the bindings
+  in scope at each element (a later sibling rebinding a prefix no longer changes an earlier
+  property, and vice versa), quoted attribute values (including a literal `>`) are handled
+  correctly, and a prefixed name with an undeclared/foreign namespace is rejected. This is the
+  robust fix for the namespace-scoping and quoted-`>` findings.
 - **Removed the unused `contextMenus` permission** from the manifest (no `chrome.contextMenus`
   usage exists) — narrows the declared attack surface; PRIVACY.md + COMPLIANCE.md updated.
 - **MODEL.md** now describes the current raw-logit quantization gate (was "softmax drift");
