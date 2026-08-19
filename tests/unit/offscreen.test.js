@@ -97,6 +97,29 @@ describe('offscreen orchestrator', () => {
     expect(res.result.ep).toBe('wasm');
   });
 
+  it('a definitive forensic signal short-circuits neural inference (no analyzeImageBytes call)', async () => {
+    const engine = await import('../../src/offscreen/inference-engine.js');
+    const { extractForensicSignals } = await import(
+      '../../src/shared/metadata/forensic-extractor.js'
+    );
+    extractForensicSignals.mockResolvedValueOnce({
+      definitive: true,
+      summary: ['c2pa:manifest-store present'],
+      features: { c2paPresent: true },
+    });
+    engine.analyzeImageBytes.mockClear();
+    const bytes = new Uint8Array([1, 2, 3, 4]).buffer;
+    const res = await dispatch(makeRequest(MSG.OFFSCREEN_ANALYZE, { bytes }));
+    expect(res.ok).toBe(true);
+    expect(res.result.verdict).toBe('ai'); // definitive forensic verdict
+    expect(res.result.score).toBe(0.99);
+    expect(res.result.forensicOnly).toBe(true);
+    expect(engine.analyzeImageBytes).not.toHaveBeenCalled(); // neural inference skipped
+    // Consumers must handle the absent neural fields (null, not undefined-missing).
+    expect(res.result.neuralScore).toBeNull();
+    expect(res.result.ep).toBeNull();
+  });
+
   it('OFFSCREEN_ANALYZE applies the user-configurable threshold to the verdict', async () => {
     const { CALIBRATION } = await import('../../src/shared/fusion/calibration.js');
     const { verdictFor } = await import('../../src/shared/fusion/fuse.js');

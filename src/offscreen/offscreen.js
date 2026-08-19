@@ -43,10 +43,31 @@ async function analyze(payload) {
       code: 'BAD_INPUT',
     });
   }
-  // 1. Forensic/metadata layer (no neural cost). May short-circuit with a definitive verdict.
+  // 1. Forensic/metadata layer (no neural cost). A definitive provenance signal (verified
+  //    C2PA/XMP/EXIF/PNG geninfo) short-circuits: skip neural inference entirely, so a proven
+  //    AI image doesn't pay the inference cost and a decode/session failure can't discard an
+  //    already-conclusive verdict.
   const forensic = await extractForensicSignals(bytes);
+  if (forensic.definitive) {
+    const fused = fuseSignals(
+      { neuralScore: 0, forensic },
+      Number.isFinite(threshold) ? { threshold } : {},
+    );
+    return {
+      score: fused.score,
+      verdict: fused.verdict,
+      reasons: fused.reasons,
+      neuralScore: null,
+      forensic: forensic.summary,
+      width: null,
+      height: null,
+      latencyMs: null,
+      ep: null,
+      forensicOnly: true,
+    };
+  }
 
-  // 2. Neural inference.
+  // 2. Neural inference (only when the forensic layer did not reach a definitive verdict).
   const neural = await engine.analyzeImageBytes(bytes);
 
   // 3. Fuse into a calibrated score. The user-configurable threshold classifies the verdict;

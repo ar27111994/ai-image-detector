@@ -18,7 +18,7 @@
 - [x] Post-release audit + hardening (2026-08-16): 32 findings fixed — accuracy docs corrected to
       the shipped numbers (84.2% raw / 83.0% augmented), NOTICE added (REQ-21), CodeQL + release
       gates + checksums, WCAG/accessibility fixes, design-token expansion, DRY refactors, offscreen
-      crash recovery, and unit tests for all previously-untested modules (<!-- AUTO:TEST_COUNT -->487<!-- /AUTO:TEST_COUNT --> tests / <!-- AUTO:TEST_FILES -->35<!-- /AUTO:TEST_FILES --> files).
+      crash recovery, and unit tests for all previously-untested modules (<!-- AUTO:TEST_COUNT -->488<!-- /AUTO:TEST_COUNT --> tests / <!-- AUTO:TEST_FILES -->35<!-- /AUTO:TEST_FILES --> files).
 - [x] PR #1 review fixes (2026-08-17): concurrent-download dedup (abandonable + supersession-safe
       via generation token) + WebGPU session-leak release; CodeQL hygiene (PNG iTXt dead store,
       pack.mjs TOCTOU); conversion-toolchain pins bumped (onnx 1.21.0, pillow 12.3.0,
@@ -82,3 +82,7 @@
       (linkedom, ISC — added as a runtime dep, bundled into offscreen.js) with an element-scoped
       namespace stack, so element-scoped rebindings and quoted `>` in attribute values are handled
       correctly. NOTICE updated.
+- [x] PR #1 review round 18 (2026-08-19): the definitive forensic fast path now actually
+      short-circuits neural inference (was latent — fusion returned 0.99/AI either way, but the
+      inference ran and a session failure could discard a conclusive verdict). Implements the
+      documented "forensic fast path" in ARCHITECTURE.md.

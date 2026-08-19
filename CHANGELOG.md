@@ -205,9 +205,19 @@ into the v1.0.0 submission.
 - **MODEL.md** now describes the current raw-logit quantization gate (was "softmax drift");
   **STATE.md** accuracy figures corrected to the canonical shipped numbers (84.2%/83.0%).
 
+### Fixed (PR #1 review round 16 — forensic fast path actually short-circuits)
+
+- **The definitive forensic path now short-circuits neural inference.** A verified C2PA/XMP/EXIF/PNG
+  provenance signal returns the fused definitive verdict (0.99/AI) **before** `analyzeImageBytes`,
+  so a proven AI image no longer pays the full inference cost and a decode/session failure can no
+  longer discard a conclusive verdict. This implements the documented "forensic fast path"
+  (ARCHITECTURE.md) that was previously latent — the fusion verdict was identical, but the work
+  wasn't bypassed. The forensic-only response carries `neuralScore: null` (consumers already treat
+  it as optional).
+
 ### Testing
 
-- **487 tests / 35 files** (was 227/24 at v1.0.0). New unit suites for the previously untested
+- **488 tests / 35 files** (was 227/24 at v1.0.0). New unit suites for the previously untested
   popup/options/onboarding pages, the offscreen orchestrator, the service-worker router, and the
   manifest verifier (`tools/verify-manifest.mjs`). Concurrency/stress suites (50-unique and
   50-identical-image stampedes verifying exactly-once inference and cache-collapse, plus
