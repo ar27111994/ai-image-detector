@@ -128,6 +128,8 @@ The service worker is killed after ~30s idle and restarted on demand. Design con
 
 - Image bytes never leave the device. The only network call is the initial model download
   (and only if the user completes setup).
-- All parsers are bounds-checked and non-throwing on malformed input.
+- All parsers are bounds-checked and non-throwing on malformed input. XMP provenance uses a real
+  namespace-aware XML parser (linkedom) with an element-scoped namespace stack, so crafted prefixes,
+  rebinding, or quoted attribute values can't forge a provenance claim.
 - `host_permissions: <all_urls>` is required to fetch cross-origin image bytes for analysis;
   no data is sent anywhere.
