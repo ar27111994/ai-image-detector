@@ -235,9 +235,18 @@ into the v1.0.0 submission.
   settling after a reset (which clears the map) can no longer delete a newer analysis's entry and
   open a duplicate-inference stampede.
 
+### Fixed (PR #1 review round 18 — XML Namespaces spec correctness)
+
+- **Default-namespace handling is now spec-correct.** Per the XML Namespaces spec, the default
+  `xmlns` applies to unprefixed **element** names, never to unprefixed **attributes**. The walker
+  now resolves them separately: an unprefixed `DigitalSourceType`/`CreatorTool` element under a
+  foreign default namespace is rejected (element case), while an unprefixed attribute stays
+  namespace-less and is accepted (attribute case). Regression tests cover both directions (foreign
+  default ns on an element → no signal; foreign default ns with an unprefixed attribute → trusted).
+
 ### Testing
 
-- **492 tests / 35 files** (was 227/24 at v1.0.0). New unit suites for the previously untested
+- **493 tests / 35 files** (was 227/24 at v1.0.0). New unit suites for the previously untested
   popup/options/onboarding pages, the offscreen orchestrator, the service-worker router, and the
   manifest verifier (`tools/verify-manifest.mjs`). Concurrency/stress suites (50-unique and
   50-identical-image stampedes verifying exactly-once inference and cache-collapse, plus

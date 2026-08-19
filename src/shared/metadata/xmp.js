@@ -115,11 +115,13 @@ export function detectXmpAiSignatures(packets) {
         else if (a.name.startsWith('xmlns:')) local.set(a.name.slice(6), a.value);
       }
       local.set('', defaultNs); // propagate the (possibly overridden) default ns to children
-      const resolve = (prefixedName) => {
+      // Per XML Namespaces: the DEFAULT namespace applies to unprefixed ELEMENT names, never to
+      // unprefixed ATTRIBUTES. Resolve the two differently.
+      const resolveElement = (prefixedName) => {
         const colon = prefixedName.indexOf(':');
         if (colon === -1) {
-          // Unqualified name: its namespace is the in-scope DEFAULT namespace. A foreign default
-          // (a non-IPTC default xmlns) makes this foreign — not namespace-free IPTC.
+          // Unprefixed element: its namespace is the in-scope DEFAULT namespace (a foreign default
+          // makes this foreign — not namespace-free IPTC).
           return { local: prefixedName, ns: defaultNs ?? null };
         }
         const prefix = prefixedName.slice(0, colon);
@@ -127,11 +129,21 @@ export function detectXmpAiSignatures(packets) {
         // rejected (do not fall back to "unqualified"). Only a prefix that resolves to the
         // canonical namespace (or no prefix at all) is trusted.
         const uri = local.get(prefix);
-        return { local: prefixedName.slice(colon + 1), ns: uri ?? 'foreign', foreign: !uri };
+        return { local: prefixedName.slice(colon + 1), ns: uri ?? 'foreign' };
+      };
+      const resolveAttribute = (name) => {
+        const colon = name.indexOf(':');
+        if (colon === -1) {
+          // Unprefixed attribute: always namespace-less (default ns does NOT apply to attributes).
+          return { local: name, ns: null };
+        }
+        const prefix = name.slice(0, colon);
+        const uri = local.get(prefix);
+        return { local: name.slice(colon + 1), ns: uri ?? 'foreign' };
       };
       for (const a of el.attributes ?? []) {
         if (a.name.startsWith('xmlns')) continue;
-        const { local, ns } = resolve(a.name);
+        const { local, ns } = resolveAttribute(a.name);
         if (local === 'DigitalSourceType' && (ns === null || ns === IPTC_NS)) {
           for (const dst of AI_DIGITAL_SOURCE_TYPES) {
             if (isExactDstValue(a.value, dst)) {
@@ -146,8 +158,9 @@ export function detectXmpAiSignatures(packets) {
           if (hit) signals.push(`xmp:CreatorTool="${a.value}"`);
         }
       }
-      // Element form: a DigitalSourceType/CreatorTool element in the right namespace.
-      const self = resolve(el.tagName ?? '');
+      // Element form: a DigitalSourceType/CreatorTool element in the right namespace (default ns
+      // applies to unprefixed element names).
+      const self = resolveElement(el.tagName ?? '');
       if (self.local === 'DigitalSourceType' && (self.ns === null || self.ns === IPTC_NS)) {
         const value = el.textContent.trim();
         for (const dst of AI_DIGITAL_SOURCE_TYPES) {
