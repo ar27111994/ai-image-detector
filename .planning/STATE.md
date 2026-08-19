@@ -15,7 +15,7 @@
   design-token expansion, DRY refactors (shared math.js, model-variant.js, centralized TIMEOUTS),
   bounded IDB get, offscreen crash recovery, and unit suites for the five previously-untested
   UI/content modules. See CHANGELOG [Unreleased] and .planning/TECH-DEBT.md.
-- Verified gates: npm ci && npm run build && npm test (<!-- AUTO:TEST_COUNT -->484<!-- /AUTO:TEST_COUNT --> tests / <!-- AUTO:TEST_FILES -->35<!-- /AUTO:TEST_FILES --> files) && npm run test:e2e
+- Verified gates: npm ci && npm run build && npm test (<!-- AUTO:TEST_COUNT -->486<!-- /AUTO:TEST_COUNT --> tests / <!-- AUTO:TEST_FILES -->35<!-- /AUTO:TEST_FILES --> files) && npm run test:e2e
   (7/7) && npm run lint && npm run format:check && npm run docs:check all pass. Coverage 98.4%
   lines / 91.1% branches / 98.0% functions (90% gate). Docs auto-synced via tools/sync-docs.mjs.
 - PR #1 review round 3 (6 threads): fixed post-write supersession gap, streamed image-fetch cap,

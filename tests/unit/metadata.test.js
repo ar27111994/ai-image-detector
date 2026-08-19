@@ -243,6 +243,24 @@ describe('xmp.detectXmpAiSignatures', () => {
     expect(hit).toBe(false);
   });
 
+  it('does NOT treat an attribute-like string inside element text as a DigitalSourceType property', () => {
+    // Adversarial: `DigitalSourceType="trainedAlgorithmicMedia"` appears only as text inside a
+    // dc:description body (not a real start-tag attribute). Must not force a definitive verdict.
+    const { hit } = detectXmpAiSignatures([
+      '<x:xmpmeta><dc:description><rdf:li>See DigitalSourceType="trainedAlgorithmicMedia" for details</rdf:li></dc:description></x:xmpmeta>',
+    ]);
+    expect(hit).toBe(false);
+  });
+
+  it('honors a single-quoted xmlns binding (XML allows either quote style)', () => {
+    // The namespace declaration is single-quoted; the prefix must still resolve to the canonical
+    // IPTC namespace and the property still count.
+    const { hit } = detectXmpAiSignatures([
+      '<x:xmpmeta xmlns:Iptc4xmpCore=\'http://iptc.org/std/Iptc4xmpCore/1.0/xmlns/\'><rdf:Description Iptc4xmpCore:DigitalSourceType="trainedAlgorithmicMedia"/></x:xmpmeta>',
+    ]);
+    expect(hit).toBe(true);
+  });
+
   it('rejects a foreign/longer CreatorTool property (ex:CreatorTool, ex:NotCreatorTool)', () => {
     const { hit: foreign } = detectXmpAiSignatures([
       '<rdf:li xmlns:ex="http://ex.example/" ex:CreatorTool="Midjourney"/>',

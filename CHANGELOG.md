@@ -178,9 +178,23 @@ into the v1.0.0 submission.
 - **TESTING.md coverage description corrected** — the 90% gate covers all of `src/**`, not only
   `src/shared` + model-manager.
 
+### Fixed (PR #1 review round 14 — XMP attribute scoping + tooling gates)
+
+- **XMP attribute matching requires a real start-tag.** `DigitalSourceType`/`CreatorTool` are only
+  extracted from an actual `<tag …>` attribute (not arbitrary element text), so the string
+  `DigitalSourceType="trainedAlgorithmicMedia"` inside a `dc:description` body no longer forces a
+  definitive verdict.
+- **XMP namespace bindings accept single-quoted values** (XML allows either quote style), so a
+  valid packet declaring `xmlns:Iptc4xmpCore='…'` is no longer missed.
+- **`quantize.py` validates raw-logit drift, not softmax.** Softmax over a single-output (`p_real`)
+  model is always 1.0 and would report zero drift even under corruption; the gate now compares
+  logits, with the tolerance recalibrated for logit space (0.5) and documented.
+- **The release workflow runs the deep manifest validator** (`npm run models:manifest`) before
+  packaging, so a tag can't publish a manifest missing required fields or valid output semantics.
+
 ### Testing
 
-- **484 tests / 35 files** (was 227/24 at v1.0.0). New unit suites for the previously untested
+- **486 tests / 35 files** (was 227/24 at v1.0.0). New unit suites for the previously untested
   popup/options/onboarding pages, the offscreen orchestrator, the service-worker router, and the
   manifest verifier (`tools/verify-manifest.mjs`). Concurrency/stress suites (50-unique and
   50-identical-image stampedes verifying exactly-once inference and cache-collapse, plus

@@ -50,6 +50,9 @@ jobs:
       - name: Tests + coverage gate
         run: npm run cover
 
+      - name: Validate model manifest (structure + integrity pins)
+        run: npm run models:manifest
+
       - name: Build extension
         run: npm run build
 

@@ -12,7 +12,12 @@ from pathlib import Path
 
 import numpy as np
 
-VALIDATION_TOLERANCE_LOGITS = 0.02  # max acceptable softmax-probability drift vs fp32 ONNX.
+# Raw-logit drift tolerance. Measured on the shipped SwinV2 int8: max |Δlogit| ≈ 0.02 on the
+# probe set (equivalent to the Δp≈0.0015 softmax drift we validated); the corrupt CLIP-family
+# case showed Δp≈0.29 which corresponds to multi-unit logit shifts — far above this bound. The
+# gate compares raw logits (not softmax) so a single-output (p_real) model can't report zero
+# drift when quantization corrupts it.
+VALIDATION_TOLERANCE_LOGITS = 0.5  # max acceptable raw-logit drift vs fp32 ONNX.
 # NOTE: int8 dynamic quantization CORRUPTS CLIP-family models (observed Δp≈0.29 on random
 # probes — activations overflow int8 range). fp16 preserves them (Δ≈0). For ViT/CLIP/SigLIP
 # we therefore ship fp16 (WebGPU) + fp32 (WASM fallback), not int8.
@@ -45,10 +50,10 @@ def main() -> int:
         for probe in probes:
             ref = ref_sess.run(None, {input_name: probe})[0]
             got = sess.run(None, {input_name: probe})[0]
-            # Compare in probability space (softmax) — the only thing the product consumes.
-            ref_p = np.exp(ref - ref.max()) / np.exp(ref - ref.max()).sum()
-            got_p = np.exp(got - got.max()) / np.exp(got - got.max()).sum()
-            worst = max(worst, float(np.max(np.abs(ref_p - got_p))))
+            # Compare raw logits — softmax over a SINGLE-output (p_real) model is always 1.0 and
+            # would report zero drift even if quantization corrupted every prediction. Logit drift
+            # is the honest signal for both multi-class and single-output heads.
+            worst = max(worst, float(np.max(np.abs(np.asarray(ref) - np.asarray(got)))))
         return worst
 
     rc = 0
@@ -74,7 +79,7 @@ def main() -> int:
     )
     drift = validate(int8_path)
     size_mb = int8_path.stat().st_size / 1e6
-    print(f"[quantize] int8: {size_mb:.1f} MB, max softmax drift {drift:.4f}")
+    print(f"[quantize] int8: {size_mb:.1f} MB, max logit drift {drift:.4f}")
     if drift > VALIDATION_TOLERANCE_LOGITS:
         print("[quantize] FAIL: int8 drift too large")
         rc = 1
@@ -90,7 +95,7 @@ def main() -> int:
         onnx.save(model_fp16, str(fp16_path))
         drift = validate(fp16_path)
         size_mb = fp16_path.stat().st_size / 1e6
-        print(f"[quantize] fp16: {size_mb:.1f} MB, max softmax drift {drift:.4f}")
+        print(f"[quantize] fp16: {size_mb:.1f} MB, max logit drift {drift:.4f}")
         if drift > VALIDATION_TOLERANCE_LOGITS:
             print("[quantize] FAIL: fp16 drift too large")
             rc = 1

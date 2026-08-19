@@ -18,7 +18,7 @@
 - [x] Post-release audit + hardening (2026-08-16): 32 findings fixed — accuracy docs corrected to
       the shipped numbers (84.2% raw / 83.0% augmented), NOTICE added (REQ-21), CodeQL + release
       gates + checksums, WCAG/accessibility fixes, design-token expansion, DRY refactors, offscreen
-      crash recovery, and unit tests for all previously-untested modules (<!-- AUTO:TEST_COUNT -->484<!-- /AUTO:TEST_COUNT --> tests / <!-- AUTO:TEST_FILES -->35<!-- /AUTO:TEST_FILES --> files).
+      crash recovery, and unit tests for all previously-untested modules (<!-- AUTO:TEST_COUNT -->486<!-- /AUTO:TEST_COUNT --> tests / <!-- AUTO:TEST_FILES -->35<!-- /AUTO:TEST_FILES --> files).
 - [x] PR #1 review fixes (2026-08-17): concurrent-download dedup (abandonable + supersession-safe
       via generation token) + WebGPU session-leak release; CodeQL hygiene (PNG iTXt dead store,
       pack.mjs TOCTOU); conversion-toolchain pins bumped (onnx 1.21.0, pillow 12.3.0,
@@ -70,3 +70,7 @@
       follow the top-level page's site rule (`sender.tab.url`); model integrity re-verified at load
       (SHA-256 re-hash before session create); dependabot auto-merge on pull_request_target;
       TESTING.md coverage description corrected (gate covers all of src/\*\*).
+- [x] PR #1 review round 15 (2026-08-19): XMP attribute extraction requires a real start-tag (an
+      attribute-like string in element text is not a property); xmlns bindings accept single-quoted
+      values; quantize.py validates raw-logit drift (softmax over a single-output model is always 1
+      and would mask corruption); release.yml now runs the deep manifest validator before packaging.
