@@ -110,9 +110,11 @@ export function detectXmpAiSignatures(packets) {
       const local = new Map(scope);
       let defaultNs = scope.get('') ?? null; // inherit the ancestor default namespace
       for (const a of el.attributes ?? []) {
-        if (a.name === 'xmlns')
-          defaultNs = a.value; // element's own default-ns declaration
-        else if (a.name.startsWith('xmlns:')) local.set(a.name.slice(6), a.value);
+        if (a.name === 'xmlns') {
+          // An empty xmlns="" RESETS the default namespace to "no namespace" (null), per XML
+          // Namespaces — it must not linger as an empty string (which fails the ns===null check).
+          defaultNs = a.value === '' ? null : a.value;
+        } else if (a.name.startsWith('xmlns:')) local.set(a.name.slice(6), a.value);
       }
       local.set('', defaultNs); // propagate the (possibly overridden) default ns to children
       // Per XML Namespaces: the DEFAULT namespace applies to unprefixed ELEMENT names, never to

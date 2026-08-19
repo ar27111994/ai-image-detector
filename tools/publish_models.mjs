@@ -47,6 +47,25 @@ async function main() {
     args.repo ?? (await gh(['repo', 'view', '--json', 'nameWithOwner', '--jq', '.nameWithOwner']));
   console.log(`[publish] repo=${repo} tag=${args.tag}`);
 
+  // Preflight: every asset key must already exist in the manifest BEFORE we create/upload anything.
+  // An unknown key would otherwise be uploaded with --clobber (possibly replacing a release asset)
+  // while the committed manifest never gains a pin — a typo would silently desync the integrity
+  // guarantee. Fail fast on any mismatch.
+  const { readFile } = await import('node:fs/promises');
+  const manifestPath = path.join(repoRoot, 'models', 'manifest.json');
+  const manifestForCheck = JSON.parse(await readFile(manifestPath, 'utf8'));
+  const knownKeys = new Set(manifestForCheck.variants.map((v) => v.key));
+  const unknown = args.assets
+    .map((a) => a.slice(0, a.indexOf('=')))
+    .filter((k) => !knownKeys.has(k));
+  if (unknown.length) {
+    throw new Error(
+      `unknown asset key(s) not in models/manifest.json: ${unknown.join(', ')}. ` +
+        'Add the variant metadata (inputSize/mean/std/labels/license) to the manifest first, ' +
+        'then re-run — refusing to upload unpinned assets.',
+    );
+  }
+
   // Ensure the release exists.
   try {
     await gh(['release', 'view', args.tag, '--repo', repo]);
@@ -91,8 +110,6 @@ async function main() {
     sizeBytes: v.sizeBytes,
   }));
 
-  const { readFile } = await import('node:fs/promises');
-  const manifestPath = path.join(repoRoot, 'models', 'manifest.json');
   const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
   manifest.releaseTag = args.tag;
   let merged = 0;

@@ -286,6 +286,16 @@ describe('xmp.detectXmpAiSignatures', () => {
     expect(hit).toBe(false);
   });
 
+  it('honors an empty xmlns="" reset (namespace-free element under a foreign ancestor default)', () => {
+    // An element declaring xmlns="" RESETS the default namespace to "no namespace". An unprefixed
+    // DigitalSourceType nested under a foreign ancestor default is namespace-free (trusted) when it
+    // carries xmlns="" — it must not inherit the foreign default.
+    const { hit } = detectXmpAiSignatures([
+      '<x:xmpmeta xmlns="http://evil.example/not-iptc"><DigitalSourceType xmlns=""><rdf:Seq><rdf:li>trainedAlgorithmicMedia</rdf:li></rdf:Seq></DigitalSourceType></x:xmpmeta>',
+    ]);
+    expect(hit).toBe(true);
+  });
+
   it('accepts an unprefixed DigitalSourceType ATTRIBUTE even under a foreign default namespace', () => {
     // Per XML Namespaces, the default namespace applies to ELEMENTS, never to unprefixed
     // ATTRIBUTES — an unprefixed attribute is always namespace-less. So DigitalSourceType="…" on an

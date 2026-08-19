@@ -18,7 +18,7 @@
 - [x] Post-release audit + hardening (2026-08-16): 32 findings fixed — accuracy docs corrected to
       the shipped numbers (84.2% raw / 83.0% augmented), NOTICE added (REQ-21), CodeQL + release
       gates + checksums, WCAG/accessibility fixes, design-token expansion, DRY refactors, offscreen
-      crash recovery, and unit tests for all previously-untested modules (<!-- AUTO:TEST_COUNT -->494<!-- /AUTO:TEST_COUNT --> tests / <!-- AUTO:TEST_FILES -->35<!-- /AUTO:TEST_FILES --> files).
+      crash recovery, and unit tests for all previously-untested modules (<!-- AUTO:TEST_COUNT -->495<!-- /AUTO:TEST_COUNT --> tests / <!-- AUTO:TEST_FILES -->35<!-- /AUTO:TEST_FILES --> files).
 - [x] PR #1 review fixes (2026-08-17): concurrent-download dedup (abandonable + supersession-safe
       via generation token) + WebGPU session-leak release; CodeQL hygiene (PNG iTXt dead store,
       pack.mjs TOCTOU); conversion-toolchain pins bumped (onnx 1.21.0, pillow 12.3.0,
@@ -90,6 +90,11 @@
       a foreign default xmlns is rejected, not treated as IPTC); PNG zTXt/iTXt decompression capped at
       MAX_METADATA_BYTES with stream cancel (zip-bomb guard); in-page blob:/data: reads capped before
       allocation; offscreen analyze reconstructs the buffer from ArrayBuffer or { data: number[] }.
+- [x] PR #1 review round 23 (2026-08-19): XMP empty `xmlns=""` reset normalizes to no-namespace;
+      publish_models.mjs preflights asset keys against the manifest before any upload (a typo fails
+      fast instead of clobbering a release asset with a stale manifest). CodeQL pack.mjs download
+      alerts dismissed as FP (SHA-256-pinned URL + verified-before-write); CodeQL missing-await on the
+      identity guard dismissed as FP (promise identity comparison, not a value to await).
 - [x] PR #1 review round 20 (2026-08-19): analysis in-flight cleanup is identity-guarded
       (`inflightAnalysis.get(key) === work` before delete), so a stale analysis settling after a reset
       (which clears the map) can no longer delete a newer analysis's entry and open a

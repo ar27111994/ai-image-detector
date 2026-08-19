@@ -258,9 +258,20 @@ into the v1.0.0 submission.
 - **The CI remote-URL scan ignores comment-only lines** (`//`, `*`, `/*`), so a documentation
   example can't trip the security gate while executable remote URLs still fail the build.
 
+### Fixed (PR #1 review round 20 — namespace reset + publish preflight)
+
+- **XMP `xmlns=""` resets the default namespace correctly.** An empty default-ns declaration now
+  normalizes to "no namespace" (null), so an unprefixed `DigitalSourceType` element carrying
+  `xmlns=""` under a foreign ancestor default is recognized as namespace-free IPTC provenance
+  instead of being ignored. Regression test verified to fail without the normalization.
+- **`publish_models.mjs` preflights every asset key against the manifest before any upload.** An
+  unknown key now fails fast (exit 1) before creating/uploading the release, so a typo can no longer
+  clobber a release asset while leaving the committed manifest unpinned. Verified: a typo'd key
+  aborts before any `gh` call.
+
 ### Testing
 
-- **494 tests / 35 files** (was 227/24 at v1.0.0). New unit suites for the previously untested
+- **495 tests / 35 files** (was 227/24 at v1.0.0). New unit suites for the previously untested
   popup/options/onboarding pages, the offscreen orchestrator, the service-worker router, and the
   manifest verifier (`tools/verify-manifest.mjs`). Concurrency/stress suites (50-unique and
   50-identical-image stampedes verifying exactly-once inference and cache-collapse, plus
