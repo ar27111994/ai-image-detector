@@ -150,6 +150,75 @@ describe('service-worker router', () => {
     expect(offscreenCalls).toBe(1); // stampede collapsed to a single inference
   });
 
+  it('a stale analysis settling after a reset does not delete a newer in-flight entry', async () => {
+    // Regression: inflightAnalysis cleanup is identity-guarded. The exact race from review: analysis
+    // A is in-flight; MODEL_RESET clears the inflight map (inflightAnalysis.clear()) while A is still
+    // settling; a new analysis B installs a fresh promise under the same key; A's finally then fires
+    // and — without the identity guard — deletes B's entry, allowing a duplicate inference stampede.
+    const fixed = fakeImageBytes();
+    globalThis.fetch = vi.fn(async () => streamFetchResponse(fixed));
+    const url = 'https://cdn.example/race.png';
+    let rejectA;
+    let releaseB;
+    let call = 0;
+    chromeStub.chrome.runtime.sendMessage = (msg) => {
+      if (msg.type === MSG.OFFSCREEN_ENSURE_READY) {
+        return Promise.resolve({
+          id: msg.id,
+          ok: true,
+          result: { ep: 'wasm', variant: 'primary-int8' },
+        });
+      }
+      if (msg.type === MSG.OFFSCREEN_ANALYZE) {
+        call++;
+        offscreenCalls++;
+        if (call === 1) {
+          // A: deferred; we settle it AFTER the reset + B's install.
+          return new Promise((_, rej) => {
+            rejectA = () => rej(new Error('A superseded'));
+          }).then(
+            () => ({ id: msg.id, ok: true, result: {} }),
+            (e) => ({ id: msg.id, ok: false, error: { message: e.message, code: 'ENGINE' } }),
+          );
+        }
+        // B (post-reset): deferred success.
+        return new Promise((res) => {
+          releaseB = () =>
+            res({ id: msg.id, ok: true, result: { score: 0.9, verdict: 'ai', reasons: [] } });
+        });
+      }
+      return Promise.resolve({ id: msg.id, ok: true, result: {} });
+    };
+
+    const a = dispatch(req(MSG.ANALYZE_IMAGE, { url }), pageSender); // A installs entry, parks
+    await new Promise((r) => setTimeout(r, 30)); // A's in-flight entry is installed
+
+    // Reset clears the inflight map (and cache) while A is still settling.
+    const { resetModelState } = await import('../../src/background/model-manager.js');
+    resetModelState.mockClear();
+    await dispatch(req(MSG.MODEL_RESET), pageSender);
+
+    // B installs a fresh in-flight entry under the same key (map was cleared).
+    const bPromise = dispatch(req(MSG.ANALYZE_IMAGE, { url }), pageSender);
+    await new Promise((r) => setTimeout(r, 30)); // B's entry installed
+
+    // Now A's stale promise settles — its finally must NOT delete B's entry. The identity guard is
+    // what makes this safe: A's `finally` checks inflightAnalysis.get(key) === A's promise (false —
+    // it's B's), so it leaves B's entry intact. Without the guard, the unconditional delete would
+    // remove B's entry.
+    rejectA();
+    await a.catch(() => {});
+
+    // A concurrent C must share B's live entry (not start a third inference).
+    const cPromise = dispatch(req(MSG.ANALYZE_IMAGE, { url }), pageSender);
+    releaseB();
+    const [rb] = await Promise.all([bPromise, cPromise]);
+    expect(rb.ok).toBe(true);
+    // A (1 inference, superseded) + B (1 inference, shared by C) = exactly 2. Without the identity
+    // guard, A's late `finally` would have deleted B's entry, so C would have started a 3rd.
+    expect(offscreenCalls).toBe(2);
+  });
+
   it('returns a clean error for a malformed analyze request (no url)', async () => {
     const res = await dispatch(req(MSG.ANALYZE_IMAGE, {}), pageSender);
     expect(res.ok).toBe(false);

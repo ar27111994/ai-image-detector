@@ -414,7 +414,10 @@ async function analyzeBytes(bytes, sourceUrl, minSize, threshold) {
     analysisCache.set(key, result);
     return result;
   } finally {
-    inflightAnalysis.delete(key);
+    // Identity-guarded cleanup: a newer analysis may have installed a fresh promise under this key
+    // (e.g. after a reset cleared the map); deleting unconditionally would clobber it and allow a
+    // duplicate inference stampede.
+    if (inflightAnalysis.get(key) === work) inflightAnalysis.delete(key);
   }
 }
 

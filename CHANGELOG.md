@@ -230,10 +230,14 @@ into the v1.0.0 submission.
 - **The offscreen analyze path reconstructs the byte buffer defensively** — it accepts an
   `ArrayBuffer` (structured clone preserves it) or the `{ data: number[] }` relay form, so analysis
   never depends on message-transport fidelity.
+- **Analysis in-flight cleanup is identity-guarded.** `analyzeBytes` deletes its `inflightAnalysis`
+  entry only when it still owns it (`inflightAnalysis.get(key) === work`), so a stale analysis
+  settling after a reset (which clears the map) can no longer delete a newer analysis's entry and
+  open a duplicate-inference stampede.
 
 ### Testing
 
-- **491 tests / 35 files** (was 227/24 at v1.0.0). New unit suites for the previously untested
+- **492 tests / 35 files** (was 227/24 at v1.0.0). New unit suites for the previously untested
   popup/options/onboarding pages, the offscreen orchestrator, the service-worker router, and the
   manifest verifier (`tools/verify-manifest.mjs`). Concurrency/stress suites (50-unique and
   50-identical-image stampedes verifying exactly-once inference and cache-collapse, plus
