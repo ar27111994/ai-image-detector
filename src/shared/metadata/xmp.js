@@ -119,7 +119,7 @@ export function detectXmpAiSignatures(packets) {
         const colon = prefixedName.indexOf(':');
         if (colon === -1) {
           // Unqualified name: its namespace is the in-scope DEFAULT namespace. A foreign default
-          // (e.g. xmlns="http://foreign") makes this foreign — not namespace-free IPTC.
+          // (a non-IPTC default xmlns) makes this foreign — not namespace-free IPTC.
           return { local: prefixedName, ns: defaultNs ?? null };
         }
         const prefix = prefixedName.slice(0, colon);
