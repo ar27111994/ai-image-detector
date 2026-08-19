@@ -18,7 +18,7 @@ bundle were inspected — not just asserted.
      network).
 - **No** `XMLHttpRequest`, `WebSocket`, `sendBeacon`, `EventSource`, `child_process`, `spawn`,
   `FormData` POST, or `connectNative`/`nativeMessaging` anywhere in `src/`.
-- **Manifest permissions**: `storage, offscreen, unlimitedStorage, contextMenus` +
+- **Manifest permissions**: `storage, offscreen, unlimitedStorage` +
   `host_permissions: <all_urls>` (required to fetch cross-origin image bytes for local analysis).
   No `nativeMessaging`.
 - **Built `dist/`** contains only JS/HTML/CSS/wasm/icons and the manifest pointer — no benchmark

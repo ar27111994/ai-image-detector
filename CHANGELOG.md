@@ -192,9 +192,19 @@ into the v1.0.0 submission.
 - **The release workflow runs the deep manifest validator** (`npm run models:manifest`) before
   packaging, so a tag can't publish a manifest missing required fields or valid output semantics.
 
+### Fixed (PR #1 review round 15 — namespace scoping + manifest hygiene + docs)
+
+- **XMP namespace resolution is element-scoped.** Bindings are resolved at each property's own
+  start-tag position, so a later sibling rebinding a prefix no longer changes how an earlier
+  `DigitalSourceType`/`CreatorTool` resolves (and vice versa).
+- **Removed the unused `contextMenus` permission** from the manifest (no `chrome.contextMenus`
+  usage exists) — narrows the declared attack surface; PRIVACY.md + COMPLIANCE.md updated.
+- **MODEL.md** now describes the current raw-logit quantization gate (was "softmax drift");
+  **STATE.md** accuracy figures corrected to the canonical shipped numbers (84.2%/83.0%).
+
 ### Testing
 
-- **486 tests / 35 files** (was 227/24 at v1.0.0). New unit suites for the previously untested
+- **487 tests / 35 files** (was 227/24 at v1.0.0). New unit suites for the previously untested
   popup/options/onboarding pages, the offscreen orchestrator, the service-worker router, and the
   manifest verifier (`tools/verify-manifest.mjs`). Concurrency/stress suites (50-unique and
   50-identical-image stampedes verifying exactly-once inference and cache-collapse, plus

@@ -252,6 +252,18 @@ describe('xmp.detectXmpAiSignatures', () => {
     expect(hit).toBe(false);
   });
 
+  it('a later sibling rebinding Iptc4xmpCore does not change an earlier property resolution', () => {
+    // Namespace declarations are element-scoped. An earlier DigitalSourceType under the canonical
+    // IPTC binding stays valid even when a later sibling rebinds the prefix to a foreign URI.
+    const { hit } = detectXmpAiSignatures([
+      '<x:xmpmeta xmlns:Iptc4xmpCore="http://iptc.org/std/Iptc4xmpCore/1.0/xmlns/">' +
+        '<rdf:Description Iptc4xmpCore:DigitalSourceType="trainedAlgorithmicMedia"/>' +
+        '<other xmlns:Iptc4xmpCore="http://evil.example/not-iptc"><foo Iptc4xmpCore:bar="x"/></other>' +
+        '</x:xmpmeta>',
+    ]);
+    expect(hit).toBe(true); // the earlier, correctly-scoped property still resolves to IPTC
+  });
+
   it('honors a single-quoted xmlns binding (XML allows either quote style)', () => {
     // The namespace declaration is single-quoted; the prefix must still resolve to the canonical
     // IPTC namespace and the property still count.

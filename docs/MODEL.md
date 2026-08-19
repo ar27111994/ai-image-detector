@@ -37,8 +37,8 @@ python tools/convert_hf_classifier.py --model haywoodsloan/ai-image-detector-dev
 python tools/quantize.py --in models-cache/haywoodsloan-fp32-slim.onnx --tag haywoodsloan
 ```
 
-Each step validates against the PyTorch reference (max |Δlogit| < 1e-3 fp32; softmax drift
-budget for quantized variants).
+Each step validates against the PyTorch reference (max |Δlogit| < 1e-3 fp32; raw-logit drift
+budget for quantized variants — see `tools/quantize.py`).
 
 ## Publishing / updating the model
 

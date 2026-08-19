@@ -38,7 +38,6 @@ extension keeps working.
 | ----------------------------- | ---------------------------------------------------------------------------------------- |
 | `offscreen`                   | Run the neural model in a long-lived offscreen document (service workers can't hold it). |
 | `storage`, `unlimitedStorage` | Persist settings and the downloaded model locally.                                       |
-| `contextMenus`                | Reserved for a right-click "analyze image" action.                                       |
 | `<all_urls>` (host)           | Fetch cross-origin image bytes for local analysis (page CORS bypass).                    |
 | Content script on all pages   | Discover and badge images on the pages you browse.                                       |
 

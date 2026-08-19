@@ -25,29 +25,40 @@ const XMP_NS = 'http://ns.adobe.com/xap/1.0/';
 const CV_URI = (dst) => `http://cv.iptc.org/newscodes/digitalsourcetype/${dst}`;
 
 /**
- * Resolve the `xmlns:prefix` bindings declared in an XMP packet.
+ * Resolve the `xmlns:prefix` bindings declared in an XMP packet, with their positions.
  * @param {string} xml the XMP packet
- * @returns {Map<string,string>} prefix -> namespace URI
+ * @returns {Array<{ prefix: string, uri: string, index: number }>} bindings in document order
  */
-function xmlnsMap(xml) {
-  const map = new Map();
+function xmlnsBindings(xml) {
+  const out = [];
   // XML permits single- or double-quoted attribute values; capture either with a matching delimiter.
   for (const m of xml.matchAll(/xmlns:([A-Za-z0-9]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g)) {
-    map.set(m[1], m[2] ?? m[3]);
+    out.push({ prefix: m[1], uri: m[2] ?? m[3], index: m.index });
   }
-  return map;
+  return out;
 }
 
 /**
- * True when `prefix` resolves to `namespaceUri` in this packet (or the property is unqualified).
- * @param {Map<string,string>} ns prefix -> URI bindings
+ * Resolve `prefix` against the bindings in scope at a property. XML namespace declarations are
+ * scoped to the element where they appear (and inherited by descendants); we use the most recent
+ * declaration at or before the end of the property's own start tag, so a later sibling rebinding a
+ * prefix does not change how this property resolves.
+ * @param {Array<{ prefix: string, uri: string, index: number }>} bindings positioned declarations
  * @param {string|null} prefix the property's namespace prefix (null when unqualified)
  * @param {string} namespaceUri the canonical namespace URI to require
+ * @param {number} scopeEnd index just past the property's own start tag
  * @returns {boolean}
  */
-function prefixResolvesTo(ns, prefix, namespaceUri) {
+function prefixResolvesTo(bindings, prefix, namespaceUri, scopeEnd) {
   if (prefix == null) return true; // intentionally-supported unqualified form
-  return ns.get(prefix) === namespaceUri;
+  // Most recent binding for this prefix declared at or before `scopeEnd` — the end of the
+  // property's own start tag — so the element's own xmlns (which may textually follow the
+  // attribute within the same `<tag …>`) counts, while a later sibling's rebinding does not.
+  let resolved;
+  for (const b of bindings) {
+    if (b.prefix === prefix && b.index <= scopeEnd) resolved = b.uri;
+  }
+  return resolved === namespaceUri;
 }
 
 /**
@@ -114,7 +125,7 @@ export function detectXmpAiSignatures(packets) {
   const signals = [];
   let digitalSourceType = null;
   for (const xml of packets) {
-    const ns = xmlnsMap(xml);
+    const ns = xmlnsBindings(xml);
     // Extract DigitalSourceType only from the exact IPTC property AND only when its prefix resolves
     // to the canonical IPTC namespace. `prefix:(…)` is captured and validated, so a packet that binds
     // Iptc4xmpCore to an unrelated URI, or uses a foreign prefix (ex:DigitalSourceType), is rejected.
@@ -128,10 +139,13 @@ export function detectXmpAiSignatures(packets) {
       /<(?:([A-Za-z0-9]+):)?(DigitalSourceType)[^>]*>([\s\S]*?)<\/(?:[A-Za-z0-9]+:)?DigitalSourceType>/gi;
     const candidates = [];
     for (const m of xml.matchAll(attrRe)) {
-      if (prefixResolvesTo(ns, m[1] ?? null, IPTC_NS)) candidates.push(m[3] ?? m[4]);
+      // Scope = up to the end of this start tag (its `>`), so the element's own xmlns counts.
+      const tagEnd = xml.indexOf('>', m.index);
+      if (prefixResolvesTo(ns, m[1] ?? null, IPTC_NS, tagEnd)) candidates.push(m[3] ?? m[4]);
     }
     for (const m of xml.matchAll(liRe)) {
-      if (!prefixResolvesTo(ns, m[1] ?? null, IPTC_NS)) continue;
+      const tagEnd = xml.indexOf('>', m.index);
+      if (!prefixResolvesTo(ns, m[1] ?? null, IPTC_NS, tagEnd)) continue;
       // The container's value is the text of its rdf:li item(s).
       for (const li of m[3].matchAll(/<rdf:li[^>]*>([^<]*)<\/rdf:li>/gi)) candidates.push(li[1]);
     }
@@ -149,7 +163,8 @@ export function detectXmpAiSignatures(packets) {
     const ctAttrRe =
       /<[A-Za-z0-9:]+(?:\s+[A-Za-z0-9:]+\s*=\s*(?:"[^"]*"|'[^']*'))*?\s+(?:([A-Za-z0-9]+):)?(CreatorTool)\s*=\s*(?:"([^"]*)"|'([^']*)')/gi;
     for (const m of xml.matchAll(ctAttrRe)) {
-      if (!prefixResolvesTo(ns, m[1] ?? null, XMP_NS)) continue;
+      const tagEnd = xml.indexOf('>', m.index);
+      if (!prefixResolvesTo(ns, m[1] ?? null, XMP_NS, tagEnd)) continue;
       const tool = (m[3] ?? m[4]).toLowerCase();
       const hit = AI_CREATOR_TOOLS.find((t) => tool.includes(t));
       if (hit) signals.push(`xmp:CreatorTool="${m[3] ?? m[4]}"`);
@@ -157,7 +172,8 @@ export function detectXmpAiSignatures(packets) {
     // rdf:li style creator tool (exact xmp:CreatorTool element, namespace-validated).
     const ctLiRe = /<(?:([A-Za-z0-9]+):)?(CreatorTool)[^>]*>\s*<rdf:li>([^<]+)<\/rdf:li>/gi;
     for (const m of xml.matchAll(ctLiRe)) {
-      if (!prefixResolvesTo(ns, m[1] ?? null, XMP_NS)) continue;
+      const tagEnd = xml.indexOf('>', m.index);
+      if (!prefixResolvesTo(ns, m[1] ?? null, XMP_NS, tagEnd)) continue;
       const hit = AI_CREATOR_TOOLS.find((t) => m[3].toLowerCase().includes(t));
       if (hit) signals.push(`xmp:CreatorTool="${m[3]}"`);
     }
