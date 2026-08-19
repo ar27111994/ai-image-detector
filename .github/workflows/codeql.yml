@@ -1,0 +1,43 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [main, 'gsd/**']
+  pull_request:
+  schedule:
+    # Weekly security sweep even when no code changes land.
+    - cron: '17 3 * * 1'
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze (JavaScript)
+    runs-on: windows-latest
+    permissions:
+      # Required to upload results to GitHub code scanning.
+      security-events: write
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@4e94bd11f71e507f7f87df81788dff88d1dacbfb # v4.31.0
+        with:
+          languages: javascript
+          # Security-relevant queries plus the extended security-and-quality suite.
+          queries: security-and-quality
+
+      # No compiled build step is required for CodeQL's JS extractor; it analyzes source
+      # directly. Skip `npm run build` so the scan reflects source, not bundled output.
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@4e94bd11f71e507f7f87df81788dff88d1dacbfb # v4.31.0
+        with:
+          category: /language:javascript

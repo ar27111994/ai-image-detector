@@ -1,0 +1,168 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'gsd/**']
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Lint, format
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install (locked)
+        run: npm ci
+      - name: Lint (blocks on error)
+        run: npm run lint
+      - name: Format check (blocks on diff)
+        run: npm run format:check
+
+  test:
+    name: Unit + integration tests with coverage gate
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install (locked)
+        run: npm ci
+      - name: Tests + coverage (fails below thresholds)
+        run: npm run cover
+      - name: Docs in sync (dynamic values recomputed from this run)
+        run: npm run docs:check
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 14
+
+  security:
+    name: Security & dependency audit
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install (locked)
+        run: npm ci
+
+      # GATE: the shipped production runtime must be clean. `npm audit --omit=dev` audits only
+      # the packages actually bundled into the extension (exifr, fft.js, onnxruntime-web). A
+      # high/critical vulnerability there fails the build.
+      - name: npm audit — shipped runtime (high+ fails)
+        run: npm audit --omit=dev --audit-level=high
+
+      # NON-BLOCKING SURFACE: dev-only transitive vulns (vitest, sharp, puppeteer, and the
+      # unpatched adm-zip inside onnxruntime-node) are reported for visibility but do NOT fail
+      # the build — none ship in the extension, and the two archive-parser CVEs (extract-zip,
+      # adm-zip) only trigger on a crafted zip, which we never process (puppeteer downloads
+      # Chrome from a trusted Google URL; onnxruntime-node's adm-zip is never exercised — no
+      # unzip path). Tracked in SECURITY.md.
+      - name: npm audit — full tree (advisory, non-blocking)
+        continue-on-error: true
+        run: npm audit --audit-level=high
+      - name: No unexpected remote URLs in shipped runtime
+        shell: pwsh
+        run: |
+          # Scan for remote URLs in EXECUTABLE code only — strip line comments and block-comment
+          # lines so a documentation example (e.g. a placeholder namespace) doesn't trip the gate.
+          $bad = Get-ChildItem -Recurse src -Filter *.js |
+            Select-String -Pattern 'https?://' |
+            Where-Object {
+              $t = $_.Line.Trim()
+              $isComment = $t.StartsWith('//') -or $t.StartsWith('*') -or $t.StartsWith('/*')
+              -not $isComment -and
+              ($_.Line -notmatch 'github\.com/ar27111994|huggingface\.co|iptc\.org|ns\.adobe\.com|w3\.org')
+            }
+          if ($bad) { $bad | ForEach-Object { Write-Host "$($_.Path):$($_.LineNumber): $($_.Line)" }; throw 'unexpected remote URL in runtime code' }
+          Write-Host 'no unexpected remote URLs in src/ (executable code)'
+
+  build:
+    name: Build + dist verification (asserts onnxruntime version coupling)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install (locked)
+        run: npm ci
+      - name: Build extension
+        run: npm run build
+      - name: Verify dist layout
+        shell: pwsh
+        run: |
+          $required = @('dist/manifest.json', 'dist/background.js', 'dist/offscreen.js', `
+            'dist/content.js', 'dist/pages/offscreen.html', 'dist/pages/popup.html', `
+            'dist/pages/tokens.css', 'dist/vendor/ort-wasm-simd-threaded.jsep.wasm', `
+            'dist/LICENSE', 'dist/NOTICE')
+          foreach ($f in $required) {
+            if (-not (Test-Path $f)) { throw "missing $f" }
+          }
+          Write-Host 'dist layout OK'
+      - name: Validate manifest schema (MV3)
+        shell: pwsh
+        run: |
+          $m = Get-Content dist/manifest.json -Raw | ConvertFrom-Json
+          if ($m.manifest_version -ne 3) { throw "manifest_version must be 3, got $($m.manifest_version)" }
+          foreach ($field in 'name','version','background','permissions','content_security_policy') {
+            if (-not $m.$field) { throw "manifest missing required field: $field" }
+          }
+          if (-not $m.background.service_worker) { throw 'manifest.background.service_worker missing' }
+          # Every declared icon must exist in dist.
+          foreach ($prop in $m.icons.PSObject.Properties) {
+            if (-not (Test-Path "dist/$($prop.Value)")) { throw "declared icon missing: $($prop.Value)" }
+          }
+          # Content-script IIFE format is enforced at build time by build.mjs
+          # (assertContentScriptIsIife, a string/comment-aware scanner) — no CI regex needed.
+          Write-Host 'manifest schema OK'
+      - name: Verify bundled model manifest pins a SHA-256
+        shell: pwsh
+        run: |
+          $mm = Get-Content dist/models/manifest.json -Raw | ConvertFrom-Json
+          foreach ($v in $mm.variants) {
+            if ($v.sha256 -notmatch '^[0-9a-f]{64}$') { throw "variant $($v.key) has no valid sha256 pin" }
+            if (-not $v.url) { throw "variant $($v.key) missing url" }
+          }
+          Write-Host 'model manifest integrity pins OK'
+      - name: Upload dist artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: extension-dist
+          path: dist/
+          retention-days: 14
+
+  e2e:
+    name: E2E (headless Chrome-for-Testing)
+    runs-on: windows-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install (locked)
+        run: npm ci
+      - name: Build extension
+        run: npm run build
+      - name: E2E suite
+        run: npm run test:e2e

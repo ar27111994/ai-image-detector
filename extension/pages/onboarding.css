@@ -1,0 +1,100 @@
+@import url('./tokens.css');
+
+body {
+  margin: 0;
+  font-family: var(--font-family);
+  font-size: var(--font-size-md);
+  color: var(--color-text);
+  background: var(--color-bg);
+}
+
+#onboarding-root {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: var(--spacing-2xl) var(--spacing-lg);
+}
+
+.onboarding-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-xl);
+}
+.onboarding-hero img {
+  width: 64px;
+  height: 64px;
+}
+.onboarding-hero h1 {
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  margin: 0;
+}
+.onboarding-hero p {
+  color: var(--color-text-muted);
+  margin: 0;
+  max-width: 46ch;
+}
+
+#status {
+  margin-top: var(--spacing-xl);
+}
+
+.progress-wrap {
+  margin-top: var(--spacing-md);
+}
+.progress-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  margin-bottom: var(--spacing-xs);
+}
+progress {
+  width: 100%;
+  height: 10px;
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  appearance: none;
+}
+progress::-webkit-progress-bar {
+  background: var(--color-bg-subtle);
+}
+progress::-webkit-progress-value {
+  background: var(--color-brand);
+  border-radius: var(--radius-full);
+  transition: width var(--duration-normal) var(--easing-standard);
+}
+progress::-moz-progress-bar {
+  background: var(--color-brand);
+  border-radius: var(--radius-full);
+}
+
+.setup-actions {
+  margin-top: var(--spacing-lg);
+  display: flex;
+  gap: var(--spacing-sm);
+  justify-content: center;
+}
+
+.next-steps {
+  margin-top: var(--spacing-xl);
+  padding: var(--spacing-lg);
+  background: var(--color-brand-subtle);
+  border-radius: var(--radius-lg);
+}
+.next-steps h2 {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  margin: 0 0 var(--spacing-sm);
+}
+.next-steps ol {
+  margin: 0;
+  padding-left: var(--spacing-lg);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+.next-steps li {
+  margin-bottom: var(--spacing-xs);
+}

@@ -1,0 +1,35 @@
+# Dependabot: keep dependencies current (security + maintenance gate).
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: '/'
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    versioning-strategy: increase
+    labels: ['dependencies']
+    # onnxruntime-web/-node update together (dependabot groups below). The build asserts the
+    # web/node versions match and the vendored wasm files exist, so a bad ORT bump fails CI and
+    # will not auto-merge.
+    groups:
+      onnxruntime:
+        patterns: ['onnxruntime-web', 'onnxruntime-node']
+
+  - package-ecosystem: github-actions
+    directory: '/'
+    schedule:
+      interval: weekly
+    labels: ['ci']
+
+  # Python tooling used for model conversion/quantization (tools/*.py). These are dev-only
+  # (never shipped in the extension) but are kept current for reproducibility + supply-chain
+  # hygiene.
+  - package-ecosystem: pip
+    directory: '/tools'
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    labels: ['dependencies', 'tooling']

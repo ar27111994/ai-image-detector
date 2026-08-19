@@ -1,0 +1,1009 @@
+/**
+ * Unit tests for the service-worker message router (src/background/service-worker.js).
+ * Focus: sender authorization (isExtensionContext) and analysis-result caching + concurrent
+ * dedup (cache-stampede protection). The offscreen boundary is mocked at the protocol layer
+ * (chrome.runtime.sendMessage), and model-manager at the module layer.
+ */
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { installChromeStub } from '../helpers/dom-stub.js';
+import { MSG, TIMEOUTS } from '../../src/shared/constants.js';
+
+// Model manager: report ready, no real IndexedDB/network.
+vi.mock('../../src/background/model-manager.js', () => ({
+  isModelReady: vi.fn(async () => true),
+  getModelState: vi.fn(async () => ({ status: 'ready', progress: 1 })),
+  loadManifest: vi.fn(async () => ({ variants: [{ kind: 'wasm', key: 'primary-int8' }] })),
+  ensureModel: vi.fn(async () => ({ alreadyReady: true })),
+  beginModelSetup: vi.fn(() => 1),
+  resetModelState: vi.fn(async () => ({ reset: true })),
+}));
+
+// Model store: the SW's resetModel() imports it dynamically to clear the store.
+vi.mock('../../src/shared/model-store.js', () => ({
+  clearModelStore: vi.fn(async () => {}),
+}));
+
+let chromeStub;
+let listener;
+let offscreenCalls;
+
+function dispatch(message, sender) {
+  return new Promise((resolve) => {
+    listener(message, sender, (res) => resolve(res));
+  });
+}
+const req = (type, payload = {}) => ({ id: `t-${Math.random()}`, type, target: null, payload });
+
+/** Minimal valid PNG header bytes (content differs per call via a counter suffix). */
+let pngCounter = 0;
+function fakeImageBytes() {
+  // 8-byte PNG magic + a varying tail so content-hash differs between images.
+  const base = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+  const tail = new Uint8Array(8);
+  new DataView(tail.buffer).setUint32(0, pngCounter++);
+  return Uint8Array.from([...base, ...tail]).buffer;
+}
+
+beforeEach(async () => {
+  chromeStub?.cleanup();
+  chromeStub = installChromeStub();
+  offscreenCalls = 0;
+  // The SW talks to the offscreen doc via chrome.runtime.sendMessage (protocol.sendRequest).
+  // Mock it: ENSURE_READY -> ok; OFFSCREEN_ANALYZE -> a synthetic AI result.
+  chromeStub.chrome.runtime.sendMessage = async (msg) => {
+    if (msg.type === MSG.OFFSCREEN_ENSURE_READY) {
+      return { id: msg.id, ok: true, result: { ep: 'wasm', variant: 'primary-int8' } };
+    }
+    if (msg.type === MSG.OFFSCREEN_ANALYZE) {
+      offscreenCalls++;
+      // Yield so concurrent callers interleave (exercises the inflight dedup).
+      await new Promise((r) => setTimeout(r, 5));
+      return {
+        id: msg.id,
+        ok: true,
+        result: { score: 0.91, verdict: 'ai', reasons: [], ep: 'wasm', latencyMs: 2 },
+      };
+    }
+    return { id: msg.id, ok: true, result: {} };
+  };
+  // SW reads image bytes for analyze-by-url via fetch(); return our fake image (streaming body).
+  globalThis.fetch = vi.fn(async () => streamFetchResponse(fakeImageBytes()));
+
+  chromeStub.chrome.runtime.onMessage.addListener = (fn) => {
+    listener = fn;
+  };
+  chromeStub.chrome.runtime.onInstalled = { addListener: () => {} };
+  chromeStub.chrome.runtime.onStartup = { addListener: () => {} };
+  chromeStub.chrome.runtime.getContexts = async () => [{ contextType: 'OFFSCREEN_DOCUMENT' }];
+  chromeStub.chrome.offscreen = { createDocument: async () => {}, closeDocument: async () => {} };
+
+  vi.resetModules();
+  await import('../../src/background/service-worker.js');
+});
+
+/** A fetch() Response stub whose body streams `buffer` in chunks (matches fetchImageBytes). */
+function streamFetchResponse(buffer, { contentLength = null } = {}) {
+  const bytes = new Uint8Array(buffer);
+  return {
+    ok: true,
+    headers: { get: (h) => (h === 'content-length' ? contentLength : null) },
+    body: {
+      getReader: () => {
+        let i = 0;
+        const chunk = 8192;
+        return {
+          read: async () =>
+            i < bytes.length
+              ? { done: false, value: bytes.slice(i, (i += chunk)) }
+              : { done: true, value: undefined },
+          cancel: async () => {},
+        };
+      },
+    },
+  };
+}
+
+const pageSender = { id: 'test-ext-id', url: 'https://site.example/page', tab: { id: 1 } };
+
+describe('service-worker router', () => {
+  it('rejects messages from a foreign extension/origin', async () => {
+    const res = await dispatch(req(MSG.GET_STATUS), { id: 'other-ext', url: 'https://evil.test' });
+    expect(res.ok).toBe(false);
+    expect(res.error.code).toBe('FORBIDDEN');
+  });
+
+  it('accepts PING from an extension context and answers', async () => {
+    const res = await dispatch(req(MSG.PING), pageSender);
+    expect(res.ok).toBe(true);
+    expect(res.result.context).toBe('background');
+  });
+
+  it('caches analysis results by content hash (second identical request is a cache hit)', async () => {
+    // Force both requests to use the SAME bytes.
+    const fixed = fakeImageBytes();
+    globalThis.fetch = vi.fn(async () => streamFetchResponse(fixed));
+
+    const first = await dispatch(
+      req(MSG.ANALYZE_IMAGE, { url: 'https://cdn.example/a.png' }),
+      pageSender,
+    );
+    const second = await dispatch(
+      req(MSG.ANALYZE_IMAGE, { url: 'https://cdn.example/a.png' }),
+      pageSender,
+    );
+    expect(first.ok).toBe(true);
+    expect(second.ok).toBe(true);
+    expect(second.result.cached).toBe(true);
+    expect(offscreenCalls).toBe(1); // second request served from cache
+  });
+
+  it('deduplicates concurrent identical analyses into one inference call', async () => {
+    const fixed = fakeImageBytes();
+    globalThis.fetch = vi.fn(async () => streamFetchResponse(fixed));
+    const url = 'https://cdn.example/dup.png';
+    const [a, b, c] = await Promise.all([
+      dispatch(req(MSG.ANALYZE_IMAGE, { url }), pageSender),
+      dispatch(req(MSG.ANALYZE_IMAGE, { url }), pageSender),
+      dispatch(req(MSG.ANALYZE_IMAGE, { url }), pageSender),
+    ]);
+    expect(a.ok && b.ok && c.ok).toBe(true);
+    expect(offscreenCalls).toBe(1); // stampede collapsed to a single inference
+  });
+
+  it('a stale analysis settling after a reset does not delete a newer in-flight entry', async () => {
+    // Regression: inflightAnalysis cleanup is identity-guarded. The exact race from review: analysis
+    // A is in-flight; MODEL_RESET clears the inflight map (inflightAnalysis.clear()) while A is still
+    // settling; a new analysis B installs a fresh promise under the same key; A's finally then fires
+    // and — without the identity guard — deletes B's entry, allowing a duplicate inference stampede.
+    const fixed = fakeImageBytes();
+    globalThis.fetch = vi.fn(async () => streamFetchResponse(fixed));
+    const url = 'https://cdn.example/race.png';
+    let rejectA;
+    let releaseB;
+    let call = 0;
+    chromeStub.chrome.runtime.sendMessage = (msg) => {
+      if (msg.type === MSG.OFFSCREEN_ENSURE_READY) {
+        return Promise.resolve({
+          id: msg.id,
+          ok: true,
+          result: { ep: 'wasm', variant: 'primary-int8' },
+        });
+      }
+      if (msg.type === MSG.OFFSCREEN_ANALYZE) {
+        call++;
+        offscreenCalls++;
+        if (call === 1) {
+          // A: deferred; we settle it AFTER the reset + B's install.
+          return new Promise((_, rej) => {
+            rejectA = () => rej(new Error('A superseded'));
+          }).then(
+            () => ({ id: msg.id, ok: true, result: {} }),
+            (e) => ({ id: msg.id, ok: false, error: { message: e.message, code: 'ENGINE' } }),
+          );
+        }
+        // B (post-reset): deferred success.
+        return new Promise((res) => {
+          releaseB = () =>
+            res({ id: msg.id, ok: true, result: { score: 0.9, verdict: 'ai', reasons: [] } });
+        });
+      }
+      return Promise.resolve({ id: msg.id, ok: true, result: {} });
+    };
+
+    const a = dispatch(req(MSG.ANALYZE_IMAGE, { url }), pageSender); // A installs entry, parks
+    await new Promise((r) => setTimeout(r, 30)); // A's in-flight entry is installed
+
+    // Reset clears the inflight map (and cache) while A is still settling.
+    const { resetModelState } = await import('../../src/background/model-manager.js');
+    resetModelState.mockClear();
+    await dispatch(req(MSG.MODEL_RESET), pageSender);
+
+    // B installs a fresh in-flight entry under the same key (map was cleared).
+    const bPromise = dispatch(req(MSG.ANALYZE_IMAGE, { url }), pageSender);
+    await new Promise((r) => setTimeout(r, 30)); // B's entry installed
+
+    // Now A's stale promise settles — its finally must NOT delete B's entry. The identity guard is
+    // what makes this safe: A's `finally` checks inflightAnalysis.get(key) === A's promise (false —
+    // it's B's), so it leaves B's entry intact. Without the guard, the unconditional delete would
+    // remove B's entry.
+    rejectA();
+    await a.catch(() => {});
+
+    // A concurrent C must share B's live entry (not start a third inference).
+    const cPromise = dispatch(req(MSG.ANALYZE_IMAGE, { url }), pageSender);
+    releaseB();
+    const [rb] = await Promise.all([bPromise, cPromise]);
+    expect(rb.ok).toBe(true);
+    // A (1 inference, superseded) + B (1 inference, shared by C) = exactly 2. Without the identity
+    // guard, A's late `finally` would have deleted B's entry, so C would have started a 3rd.
+    expect(offscreenCalls).toBe(2);
+  });
+
+  it('returns a clean error for a malformed analyze request (no url)', async () => {
+    const res = await dispatch(req(MSG.ANALYZE_IMAGE, {}), pageSender);
+    expect(res.ok).toBe(false);
+    expect(res.error.code).toBe('BAD_INPUT');
+  });
+
+  it('skips analysis on a site the user disabled', async () => {
+    // Disable the host first.
+    await dispatch(
+      req(MSG.SET_SITE_ENABLED, { hostname: 'site.example', enabled: false }),
+      pageSender,
+    );
+    const res = await dispatch(
+      req(MSG.ANALYZE_IMAGE, { url: 'https://cdn.example/x.png' }),
+      pageSender,
+    );
+    expect(res.ok).toBe(true);
+    expect(res.result.skipped).toBe(true);
+    expect(res.result.reason).toBe('site-disabled');
+    expect(offscreenCalls).toBe(0);
+  });
+
+  it('skips the byte-relay path (ANALYZE_IMAGE_BYTES) on a disabled site', async () => {
+    // Regression: data:/blob: images on a disabled page are routed here by the content script and
+    // must be skipped like URL-backed images (the per-site rule must apply before byte handling).
+    await dispatch(
+      req(MSG.SET_SITE_ENABLED, { hostname: 'site.example', enabled: false }),
+      pageSender,
+    );
+    const res = await dispatch(
+      req(MSG.ANALYZE_IMAGE_BYTES, { bytes: fakeImageBytes() }),
+      pageSender,
+    );
+    expect(res.ok).toBe(true);
+    expect(res.result.skipped).toBe(true);
+    expect(res.result.reason).toBe('site-disabled');
+    expect(offscreenCalls).toBe(0);
+  });
+
+  it('applies the TOP-LEVEL tab site rule to a cross-origin iframe request (all_frames)', async () => {
+    // Disable the top-level site; a request from a cross-origin iframe (sender.url = iframe host,
+    // sender.tab.url = the disabled page) must be skipped — the page rule governs, not the frame's.
+    await dispatch(
+      req(MSG.SET_SITE_ENABLED, { hostname: 'site.example', enabled: false }),
+      pageSender,
+    );
+    const frameSender = {
+      id: 'test-ext-id',
+      url: 'https://cdn.embedded.example/frame', // cross-origin iframe
+      tab: { id: 1, url: 'https://site.example/page' }, // the disabled top-level page
+    };
+    const res = await dispatch(
+      req(MSG.ANALYZE_IMAGE, { url: 'https://cdn.embedded.example/x.png' }),
+      frameSender,
+    );
+    expect(res.ok).toBe(true);
+    expect(res.result.skipped).toBe(true);
+    expect(res.result.reason).toBe('site-disabled');
+    expect(offscreenCalls).toBe(0);
+  });
+
+  it('recovers when the offscreen document fails once (recreate + retry)', async () => {
+    // First ENSURE_READY fails (simulating a crashed offscreen doc); the SW should recreate
+    // the document and retry, succeeding on the second attempt.
+    let ensureAttempts = 0;
+    let closeCalls = 0;
+    chromeStub.chrome.offscreen.closeDocument = async () => {
+      closeCalls++;
+    };
+    chromeStub.chrome.runtime.getContexts = async () => []; // after close, none remain
+    chromeStub.chrome.runtime.sendMessage = async (msg) => {
+      if (msg.type === MSG.OFFSCREEN_ENSURE_READY) {
+        ensureAttempts++;
+        if (ensureAttempts === 1) {
+          return { id: msg.id, ok: false, error: { message: 'offscreen gone', code: 'NO_DOC' } };
+        }
+        return { id: msg.id, ok: true, result: { ep: 'wasm', variant: 'primary-int8' } };
+      }
+      if (msg.type === MSG.OFFSCREEN_ANALYZE) {
+        offscreenCalls++;
+        return {
+          id: msg.id,
+          ok: true,
+          result: { score: 0.5, verdict: 'uncertain', reasons: [], ep: 'wasm', latencyMs: 1 },
+        };
+      }
+      return { id: msg.id, ok: true, result: {} };
+    };
+
+    const res = await dispatch(
+      req(MSG.ANALYZE_IMAGE, { url: 'https://cdn.example/recover.png' }),
+      pageSender,
+    );
+    expect(res.ok).toBe(true);
+    expect(ensureAttempts).toBe(2); // failed once, retried after recreate
+    expect(closeCalls).toBeGreaterThan(0); // recovery closed the stale document
+  });
+
+  it('recovery clears cached manifest + rejected init promise (no stale reuse)', async () => {
+    // Regression test for the recovery-state bug: after a failed warm-up, the retry must not
+    // reuse the rejected initializingSession promise nor a stale cachedManifest.
+    const { loadManifest } = await import('../../src/background/model-manager.js');
+    let ensureAttempts = 0;
+    chromeStub.chrome.offscreen.closeDocument = async () => {};
+    chromeStub.chrome.runtime.getContexts = async () => [];
+    chromeStub.chrome.runtime.sendMessage = async (msg) => {
+      if (msg.type === MSG.OFFSCREEN_ENSURE_READY) {
+        ensureAttempts++;
+        // Fail the first attempt; succeed thereafter. The retry must carry a FRESH manifest
+        // (loadManifest called again) — if the guard state weren't cleared, the retry would
+        // reuse the rejected promise and never reach a second sendMessage.
+        if (ensureAttempts === 1) {
+          return { id: msg.id, ok: false, error: { message: 'dead', code: 'NO_DOC' } };
+        }
+        return { id: msg.id, ok: true, result: { ep: 'wasm', variant: 'primary-int8' } };
+      }
+      if (msg.type === MSG.OFFSCREEN_ANALYZE) {
+        return {
+          id: msg.id,
+          ok: true,
+          result: { score: 0.5, verdict: 'uncertain', reasons: [], ep: 'wasm', latencyMs: 1 },
+        };
+      }
+      return { id: msg.id, ok: true, result: {} };
+    };
+
+    const res = await dispatch(
+      req(MSG.ANALYZE_IMAGE, { url: 'https://cdn.example/recover2.png' }),
+      pageSender,
+    );
+    expect(res.ok).toBe(true);
+    expect(ensureAttempts).toBe(2);
+    // A fresh manifest must be loaded for the retry (initial + re-load after recovery).
+    expect(loadManifest.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('rejects an oversized image by content-length before reading the body', async () => {
+    globalThis.fetch = vi.fn(async () =>
+      streamFetchResponse(new ArrayBuffer(8), { contentLength: String(64 * 1024 * 1024) }),
+    );
+    const res = await dispatch(
+      req(MSG.ANALYZE_IMAGE, { url: 'https://cdn.example/huge.png' }),
+      pageSender,
+    );
+    expect(res.ok).toBe(false);
+    expect(res.error.message).toMatch(/too large/);
+    expect(offscreenCalls).toBe(0);
+  });
+
+  it('rejects an oversized image streamed past the cap (no content-length)', async () => {
+    const { MAX_IMAGE_BYTES } = await import('../../src/shared/constants.js');
+    // A chunked response with no Content-Length that overflows the cap mid-stream must be
+    // cancelled and rejected, not buffered whole then measured.
+    const oversized = new Uint8Array(MAX_IMAGE_BYTES + 1024);
+    globalThis.fetch = vi.fn(async () => streamFetchResponse(oversized));
+    const res = await dispatch(
+      req(MSG.ANALYZE_IMAGE, { url: 'https://cdn.example/huge2.png' }),
+      pageSender,
+    );
+    expect(res.ok).toBe(false);
+    expect(res.error.message).toMatch(/too large/);
+    expect(offscreenCalls).toBe(0);
+  });
+
+  it('rejects oversized raw bytes before copying (ANALYZE_IMAGE_BYTES)', async () => {
+    const { MAX_IMAGE_BYTES } = await import('../../src/shared/constants.js');
+    const res = await dispatch(
+      req(MSG.ANALYZE_IMAGE_BYTES, { bytes: new ArrayBuffer(MAX_IMAGE_BYTES + 1) }),
+      pageSender,
+    );
+    expect(res.ok).toBe(false);
+    expect(res.error.code).toBe('TOO_LARGE');
+    expect(offscreenCalls).toBe(0);
+  });
+
+  it('rejects an oversized { data: number[] } payload by length before copying', async () => {
+    const { MAX_IMAGE_BYTES } = await import('../../src/shared/constants.js');
+    // normalizeBytes reads `.length` before copying any element, so a sparse array (no elements
+    // materialized) crosses the cap without allocating hundreds of MB — keeps this test fast under
+    // full-suite load.
+    const sparse = new Array(MAX_IMAGE_BYTES + 1); // length set, elements empty (holes)
+    const res = await dispatch(
+      req(MSG.ANALYZE_IMAGE_BYTES, { bytes: { data: sparse } }),
+      pageSender,
+    );
+    expect(res.ok).toBe(false);
+    expect(res.error.code).toBe('TOO_LARGE');
+    expect(offscreenCalls).toBe(0);
+  });
+
+  it('skips data:/blob: URLs on the by-url path (bytes required instead)', async () => {
+    const res = await dispatch(
+      req(MSG.ANALYZE_IMAGE, { url: 'data:image/png;base64,AAAA' }),
+      pageSender,
+    );
+    expect(res.ok).toBe(true);
+    expect(res.result.skipped).toBe(true);
+    expect(res.result.reason).toBe('bytes-required');
+  });
+
+  it('handles a fetch HTTP error as a clean error envelope', async () => {
+    globalThis.fetch = vi.fn(async () => ({
+      ok: false,
+      status: 404,
+      headers: { get: () => null },
+    }));
+    const res = await dispatch(
+      req(MSG.ANALYZE_IMAGE, { url: 'https://cdn.example/missing.png' }),
+      pageSender,
+    );
+    expect(res.ok).toBe(false);
+    expect(res.error.message).toMatch(/HTTP 404/);
+  });
+
+  it('analyzes raw bytes sent by the content script (ANALYZE_IMAGE_BYTES)', async () => {
+    const bytes = fakeImageBytes();
+    const res = await dispatch(
+      req(MSG.ANALYZE_IMAGE_BYTES, { bytes: { data: Array.from(new Uint8Array(bytes)) } }),
+      pageSender,
+    );
+    expect(res.ok).toBe(true);
+    expect(res.result.verdict).toBe('ai');
+    expect(offscreenCalls).toBe(1);
+  });
+
+  it('rejects ANALYZE_IMAGE_BYTES with no bytes (BAD_INPUT)', async () => {
+    const res = await dispatch(req(MSG.ANALYZE_IMAGE_BYTES, {}), pageSender);
+    expect(res.ok).toBe(false);
+    expect(res.error.code).toBe('BAD_INPUT');
+  });
+
+  it('MODEL_DOWNLOAD_START delegates to model-manager.ensureModel', async () => {
+    const { ensureModel } = await import('../../src/background/model-manager.js');
+    ensureModel.mockClear();
+    const res = await dispatch(req(MSG.MODEL_DOWNLOAD_START), pageSender);
+    expect(res.ok).toBe(true);
+    expect(ensureModel).toHaveBeenCalled();
+  });
+
+  it('concurrent MODEL_DOWNLOAD_START calls share one in-flight ensureModel', async () => {
+    const { ensureModel } = await import('../../src/background/model-manager.js');
+    // Hold the download open so both dispatches overlap (a timed-out onboarding retry while the
+    // first download is still running must not start a second 311MB acquisition).
+    let release;
+    ensureModel.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = () => resolve({ key: 'primary-int8', bytes: 311000000, verified: true });
+        }),
+    );
+    ensureModel.mockClear();
+
+    const p1 = dispatch(req(MSG.MODEL_DOWNLOAD_START), pageSender);
+    const p2 = dispatch(req(MSG.MODEL_DOWNLOAD_START), pageSender);
+    release();
+    const [r1, r2] = await Promise.all([p1, p2]);
+
+    expect(r1.ok).toBe(true);
+    expect(r2.ok).toBe(true);
+    // One shared operation: both callers resolve with the same result, ensureModel ran once.
+    expect(ensureModel).toHaveBeenCalledTimes(1);
+    expect(r1.result).toEqual(r2.result);
+  });
+
+  it('a stalled download times out and a retry starts a fresh ensureModel', async () => {
+    const { ensureModel } = await import('../../src/background/model-manager.js');
+    vi.useFakeTimers();
+    try {
+      // First download never settles (a stalled fetch stream) — the SW operation hangs.
+      ensureModel.mockImplementationOnce(() => new Promise(() => {}));
+      ensureModel.mockClear();
+
+      const p1 = dispatch(req(MSG.MODEL_DOWNLOAD_START), pageSender);
+      // Let the handler register the in-flight (timed) promise, then fire the deadline.
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(TIMEOUTS.MODEL_DOWNLOAD_MS + 1);
+      const r1 = await p1;
+      expect(r1.ok).toBe(false);
+      expect(r1.error.code).toBe('TIMEOUT');
+
+      // Retry: must NOT await the stuck promise — it clears and starts a replacement download.
+      vi.useRealTimers();
+      ensureModel.mockImplementation(async () => ({ alreadyReady: true }));
+      const r2 = await dispatch(req(MSG.MODEL_DOWNLOAD_START), pageSender);
+      expect(r2.ok).toBe(true);
+      expect(ensureModel).toHaveBeenCalledTimes(2); // stalled + replacement
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('MODEL_DOWNLOAD_STATUS returns the model state', async () => {
+    const res = await dispatch(req(MSG.MODEL_DOWNLOAD_STATUS), pageSender);
+    expect(res.ok).toBe(true);
+    expect(res.result.status).toBe('ready');
+  });
+
+  it('MODEL_RESET during a pending download lets a fresh start run a NEW ensureModel (no SUPERSEDED reuse)', async () => {
+    const { ensureModel, beginModelSetup } = await import('../../src/background/model-manager.js');
+    // A download is in flight (never settles during the test).
+    ensureModel.mockImplementationOnce(() => new Promise(() => {}));
+    ensureModel.mockClear();
+    beginModelSetup.mockClear();
+
+    const first = dispatch(req(MSG.MODEL_DOWNLOAD_START), pageSender); // parks
+    await new Promise((r) => setTimeout(r, 10)); // let it register the in-flight promise
+
+    // Reset: advances the generation and (after the fix) clears the in-flight dedup handle.
+    const reset = await dispatch(req(MSG.MODEL_RESET), pageSender);
+    expect(reset.ok).toBe(true);
+    expect(beginModelSetup).toHaveBeenCalled(); // reset invalidated the in-flight attempt
+
+    // A fresh start must begin a NEW ensureModel, not await the invalidated (pending) one.
+    ensureModel.mockImplementation(async () => ({ alreadyReady: true }));
+    const second = await dispatch(req(MSG.MODEL_DOWNLOAD_START), pageSender);
+    expect(second.ok).toBe(true);
+    expect(second.error).toBeUndefined(); // not a SUPERSEDED error from the stale promise
+    expect(ensureModel).toHaveBeenCalledTimes(2); // the parked one + the fresh one
+
+    first.catch(() => {}); // the parked download may reject on teardown; ignore
+  });
+
+  it('MODEL_RESET drops the in-memory session + analysis cache after the persisted reset', async () => {
+    const { resetModelState } = await import('../../src/background/model-manager.js');
+    resetModelState.mockClear();
+    let closed = 0;
+    chromeStub.chrome.offscreen.closeDocument = async () => {
+      closed++;
+    };
+
+    // Populate the analysis cache via a real analysis (cached on the second identical request).
+    const fixed = fakeImageBytes();
+    globalThis.fetch = vi.fn(async () => streamFetchResponse(fixed));
+    await dispatch(req(MSG.ANALYZE_IMAGE, { url: 'https://cdn.example/c.png' }), pageSender);
+    const before = await dispatch(req(MSG.GET_STATUS), pageSender);
+    expect(before.result.cacheSize).toBeGreaterThan(0); // cache populated
+
+    const res = await dispatch(req(MSG.MODEL_RESET), pageSender);
+    expect(res.ok).toBe(true);
+    expect(resetModelState).toHaveBeenCalled();
+
+    // The offscreen document was closed (session dropped) and the analysis cache cleared.
+    expect(closed).toBeGreaterThan(0);
+    const after = await dispatch(req(MSG.GET_STATUS), pageSender);
+    expect(after.result.cacheSize).toBe(0);
+  });
+
+  it('a start that arrives while reset is in flight awaits the reset before checking readiness', async () => {
+    const { ensureModel, resetModelState } = await import('../../src/background/model-manager.js');
+    // Reset parks (queued clear+missing not yet committed). A start arriving now carries a newer
+    // generation, so the supersession check won't stop it — it must await the reset barrier, so
+    // ensureModel runs only after reset finishes (and sees `missing`, not a stale pre-clear ready).
+    let releaseReset;
+    resetModelState.mockImplementationOnce(
+      () =>
+        new Promise((r) => {
+          releaseReset = () => r({ reset: true });
+        }),
+    );
+    const callOrder = [];
+    ensureModel.mockImplementation(async () => {
+      callOrder.push('ensureModel');
+      return { alreadyReady: false, started: true };
+    });
+    resetModelState.mockClear();
+    ensureModel.mockClear();
+
+    const reset = dispatch(req(MSG.MODEL_RESET), pageSender);
+    const start = dispatch(req(MSG.MODEL_DOWNLOAD_START), pageSender); // arrives during reset
+    // The start must NOT have called ensureModel yet — it's awaiting the reset barrier.
+    await new Promise((r) => setTimeout(r, 30));
+    expect(ensureModel).not.toHaveBeenCalled(); // blocked behind the reset barrier
+
+    releaseReset();
+    await reset;
+    const res = await start;
+    expect(res.ok).toBe(true);
+    expect(ensureModel).toHaveBeenCalledTimes(1); // ran only after reset completed
+    expect(callOrder).toEqual(['ensureModel']); // after reset, not before
+  });
+
+  it('a superseded download settling does NOT clear a replacement download dedup handle', async () => {
+    const { ensureModel } = await import('../../src/background/model-manager.js');
+    // Attempt A parks. Reset clears the handle and starts replacement B (parks). When A settles,
+    // its finally must NOT clear B's handle — a third start must dedup with B, not start anew.
+    let releaseA;
+    let releaseB;
+    ensureModel
+      .mockImplementationOnce(
+        () =>
+          new Promise((r) => {
+            releaseA = r;
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise((r) => {
+            releaseB = r;
+          }),
+      );
+    ensureModel.mockClear();
+
+    const a = dispatch(req(MSG.MODEL_DOWNLOAD_START), pageSender); // attempt A parks
+    await new Promise((r) => setTimeout(r, 10));
+    await dispatch(req(MSG.MODEL_RESET), pageSender); // clears handle
+    const b = dispatch(req(MSG.MODEL_DOWNLOAD_START), pageSender); // replacement B parks
+    await new Promise((r) => setTimeout(r, 10));
+    expect(ensureModel).toHaveBeenCalledTimes(2); // A + B
+
+    // A settles (superseded). Its finally must not clear B's in-flight handle.
+    releaseA({ key: 'stale' });
+    await a;
+
+    // Third start while B still pending must SHARE B (no third ensureModel call).
+    const c = dispatch(req(MSG.MODEL_DOWNLOAD_START), pageSender);
+    releaseB({ key: 'primary-int8', bytes: 1, verified: true });
+    const [rb, rc] = await Promise.all([b, c]);
+    expect(rb.ok).toBe(true);
+    expect(rc.ok).toBe(true);
+    expect(ensureModel).toHaveBeenCalledTimes(2); // still 2 — C deduped with B
+  });
+
+  it('GET_TAB_STATS returns per-tab tallies after an analysis', async () => {
+    const fixed = fakeImageBytes();
+    globalThis.fetch = vi.fn(async () => streamFetchResponse(fixed));
+    await dispatch(req(MSG.ANALYZE_IMAGE, { url: 'https://cdn.example/stat.png' }), pageSender);
+    const res = await dispatch(req(MSG.GET_TAB_STATS, { tabId: 1 }), pageSender);
+    expect(res.ok).toBe(true);
+    expect(res.result.analyzed).toBeGreaterThanOrEqual(1);
+    expect(res.result.ai).toBeGreaterThanOrEqual(1);
+  });
+
+  it('MODEL_RESET clears the model store and resets state', async () => {
+    // resetModel imports model-store dynamically; stub it via the real module path.
+    const res = await dispatch(req(MSG.MODEL_RESET), pageSender);
+    expect(res.ok).toBe(true);
+    expect(res.result.reset).toBe(true);
+  });
+
+  it('opens the onboarding page on first install when the model is not ready', async () => {
+    const { isModelReady } = await import('../../src/background/model-manager.js');
+    isModelReady.mockResolvedValueOnce(false);
+    const created = [];
+    chromeStub.chrome.tabs.create = async (t) => created.push(t);
+    let installedHandler;
+    chromeStub.chrome.runtime.onInstalled = { addListener: (fn) => (installedHandler = fn) };
+    vi.resetModules();
+    await import('../../src/background/service-worker.js');
+    await installedHandler({ reason: 'install' });
+    expect(created.length).toBe(1);
+    expect(String(created[0].url)).toContain('onboarding.html');
+  });
+
+  it('aggregates stats across tabs when GET_TAB_STATS is called without a tabId', async () => {
+    // Use the bytes path with distinct content per tab so each is a fresh analysis (not a
+    // content-hash cache hit shared across tabs).
+    const mkBytes = () => ({ data: Array.from(new Uint8Array(fakeImageBytes())) });
+    const r1 = await dispatch(req(MSG.ANALYZE_IMAGE_BYTES, { bytes: mkBytes() }), pageSender);
+    const r2 = await dispatch(req(MSG.ANALYZE_IMAGE_BYTES, { bytes: mkBytes() }), {
+      ...pageSender,
+      tab: { id: 2 },
+    });
+    expect(r1.ok && r2.ok).toBe(true);
+    // Aggregate path: no sender.tab and no payload.tabId -> sum across all tabs.
+    const res = await dispatch(req(MSG.GET_TAB_STATS, {}), { id: 'test-ext-id' });
+    expect(res.ok).toBe(true);
+    expect(res.result.analyzed).toBeGreaterThanOrEqual(2);
+  });
+
+  it("resets a tab's stats when the tab reloads (onUpdated loading)", async () => {
+    const fixed = fakeImageBytes();
+    globalThis.fetch = vi.fn(async () => streamFetchResponse(fixed));
+    let updatedHandler;
+    chromeStub.chrome.tabs.onUpdated = { addListener: (fn) => (updatedHandler = fn) };
+    vi.resetModules();
+    await import('../../src/background/service-worker.js');
+    await dispatch(req(MSG.ANALYZE_IMAGE, { url: 'https://cdn.example/reload.png' }), pageSender);
+    let res = await dispatch(req(MSG.GET_TAB_STATS, { tabId: 1 }), pageSender);
+    expect(res.result.analyzed).toBeGreaterThanOrEqual(1);
+    // Fire the tab-reload listener -> stats reset.
+    updatedHandler(1, { status: 'loading' });
+    res = await dispatch(req(MSG.GET_TAB_STATS, { tabId: 1 }), pageSender);
+    expect(res.result.analyzed).toBe(0);
+  });
+
+  it("drops a closed tab's stats (onRemoved)", async () => {
+    const fixed = fakeImageBytes();
+    globalThis.fetch = vi.fn(async () => streamFetchResponse(fixed));
+    let removedHandler;
+    chromeStub.chrome.tabs.onRemoved = { addListener: (fn) => (removedHandler = fn) };
+    vi.resetModules();
+    await import('../../src/background/service-worker.js');
+    await dispatch(req(MSG.ANALYZE_IMAGE, { url: 'https://cdn.example/close.png' }), pageSender);
+    let res = await dispatch(req(MSG.GET_TAB_STATS, { tabId: 1 }), pageSender);
+    expect(res.result.analyzed).toBeGreaterThanOrEqual(1);
+    removedHandler(1);
+    res = await dispatch(req(MSG.GET_TAB_STATS, { tabId: 1 }), pageSender);
+    expect(res.result.analyzed).toBe(0);
+  });
+
+  it('does NOT open onboarding on install when the model is already ready', async () => {
+    const created = [];
+    chromeStub.chrome.tabs.create = async (t) => created.push(t);
+    let installedHandler;
+    chromeStub.chrome.runtime.onInstalled = { addListener: (fn) => (installedHandler = fn) };
+    vi.resetModules();
+    await import('../../src/background/service-worker.js');
+    await installedHandler({ reason: 'install' }); // isModelReady() is true by default
+    expect(created.length).toBe(0);
+  });
+
+  it('rejects a sender with a foreign id even when it has a tab', async () => {
+    const res = await dispatch(req(MSG.GET_STATUS), {
+      id: 'evil-ext',
+      url: 'https://evil.test/',
+      tab: { id: 9 },
+    });
+    expect(res.ok).toBe(false);
+    expect(res.error.code).toBe('FORBIDDEN');
+  });
+
+  it('rejects a sender with a foreign origin and no tab', async () => {
+    const res = await dispatch(req(MSG.GET_STATUS), {
+      id: 'test-ext-id',
+      origin: 'https://not-us.example',
+    });
+    expect(res.ok).toBe(false);
+    expect(res.error.code).toBe('FORBIDDEN');
+  });
+
+  it('accepts a same-origin extension page (no tab)', async () => {
+    const res = await dispatch(req(MSG.PING), {
+      id: 'test-ext-id',
+      url: 'chrome-extension://test-ext-id/pages/options.html',
+    });
+    expect(res.ok).toBe(true);
+  });
+
+  it('rejects a message with no sender', async () => {
+    const res = await dispatch(req(MSG.PING), null);
+    expect(res.ok).toBe(false);
+    expect(res.error.code).toBe('FORBIDDEN');
+  });
+
+  it('ignores non-envelope messages entirely (no sendResponse)', async () => {
+    let responded = false;
+    const keepOpen = listener({ notAnEnvelope: true }, pageSender, () => (responded = true));
+    expect(keepOpen).toBe(false);
+    expect(responded).toBe(false);
+  });
+
+  it('creates the offscreen document when none exists (getContexts empty)', async () => {
+    chromeStub.chrome.runtime.getContexts = async () => []; // no existing doc
+    let created = 0;
+    chromeStub.chrome.offscreen.createDocument = async () => {
+      created++;
+    };
+    vi.resetModules();
+    await import('../../src/background/service-worker.js');
+    const res = await dispatch(
+      req(MSG.ANALYZE_IMAGE_BYTES, {
+        bytes: { data: Array.from(new Uint8Array(fakeImageBytes())) },
+      }),
+      pageSender,
+    );
+    expect(res.ok).toBe(true);
+    expect(created).toBeGreaterThanOrEqual(1);
+  });
+
+  it('returns MODEL_NOT_READY when analysis is requested before setup', async () => {
+    const { isModelReady } = await import('../../src/background/model-manager.js');
+    isModelReady.mockResolvedValueOnce(false);
+    const res = await dispatch(
+      req(MSG.ANALYZE_IMAGE_BYTES, {
+        bytes: { data: Array.from(new Uint8Array(fakeImageBytes())) },
+      }),
+      pageSender,
+    );
+    expect(res.ok).toBe(false);
+    expect(res.error.code).toBe('MODEL_NOT_READY');
+  });
+
+  it('surfaces an offscreen failure response (not-ok) as an error after recovery also fails', async () => {
+    // Both the initial warm-up AND the post-recovery retry fail -> error propagates.
+    chromeStub.chrome.offscreen.closeDocument = async () => {};
+    chromeStub.chrome.runtime.getContexts = async () => [];
+    chromeStub.chrome.runtime.sendMessage = async (msg) => {
+      if (msg.type === MSG.OFFSCREEN_ENSURE_READY) {
+        return { id: msg.id, ok: false, error: { message: 'engine dead', code: 'ENGINE' } };
+      }
+      return { id: msg.id, ok: true, result: {} };
+    };
+    const res = await dispatch(
+      req(MSG.ANALYZE_IMAGE_BYTES, {
+        bytes: { data: Array.from(new Uint8Array(fakeImageBytes())) },
+      }),
+      pageSender,
+    );
+    expect(res.ok).toBe(false);
+    expect(res.error.message).toMatch(/engine dead|init failed/i);
+  });
+
+  it('dedupes concurrent offscreen-document creation into one create call', async () => {
+    // No existing doc; two concurrent analyses must share one createDocument.
+    chromeStub.chrome.runtime.getContexts = async () => [];
+    let created = 0;
+    chromeStub.chrome.offscreen.createDocument = async () => {
+      created++;
+      await new Promise((r) => setTimeout(r, 10)); // hold creation so the 2nd caller overlaps
+    };
+    vi.resetModules();
+    await import('../../src/background/service-worker.js');
+    const bytes = () => ({ data: Array.from(new Uint8Array(fakeImageBytes())) });
+    await Promise.all([
+      dispatch(req(MSG.ANALYZE_IMAGE_BYTES, { bytes: bytes() }), pageSender),
+      dispatch(req(MSG.ANALYZE_IMAGE_BYTES, { bytes: bytes() }), pageSender),
+    ]);
+    expect(created).toBe(1);
+  });
+
+  it('tallies each verdict class into tab stats (ai/real/uncertain/error)', async () => {
+    // Drive four analyses with distinct bytes, each returning a different verdict.
+    const verdicts = ['ai', 'real', 'uncertain', 'error'];
+    let i = 0;
+    chromeStub.chrome.runtime.sendMessage = async (msg) => {
+      if (msg.type === MSG.OFFSCREEN_ENSURE_READY) {
+        return { id: msg.id, ok: true, result: { ep: 'wasm', variant: 'primary-int8' } };
+      }
+      if (msg.type === MSG.OFFSCREEN_ANALYZE) {
+        const v = verdicts[i++ % verdicts.length];
+        return {
+          id: msg.id,
+          ok: true,
+          result: { score: 0.5, verdict: v, reasons: [], ep: 'wasm', latencyMs: 1 },
+        };
+      }
+      return { id: msg.id, ok: true, result: {} };
+    };
+    for (let k = 0; k < 4; k++) {
+      await dispatch(
+        req(MSG.ANALYZE_IMAGE_BYTES, {
+          bytes: { data: Array.from(new Uint8Array(fakeImageBytes())) },
+        }),
+        pageSender,
+      );
+    }
+    const res = await dispatch(req(MSG.GET_TAB_STATS, { tabId: 1 }), pageSender);
+    expect(res.ok).toBe(true);
+    expect(res.result.analyzed).toBe(4);
+    expect(res.result.ai + res.result.real + res.result.uncertain + res.result.error).toBe(4);
+  });
+
+  it('does not record stats for a skipped result', async () => {
+    await dispatch(
+      req(MSG.SET_SITE_ENABLED, { hostname: 'site.example', enabled: false }),
+      pageSender,
+    );
+    await dispatch(
+      req(MSG.ANALYZE_IMAGE, { url: 'https://cdn.example/skip.png' }),
+      pageSender, // site disabled -> skipped
+    );
+    const res = await dispatch(req(MSG.GET_TAB_STATS, { tabId: 1 }), pageSender);
+    expect(res.result.analyzed).toBe(0);
+  });
+
+  it('setSiteEnabled uses the sender URL hostname when payload omits hostname', async () => {
+    const res = await dispatch(req(MSG.SET_SITE_ENABLED, { enabled: false }), {
+      id: 'test-ext-id',
+      url: 'https://host-from-sender.example/page',
+      tab: { id: 3 },
+    });
+    expect(res.ok).toBe(true);
+    // The rule should now exist for the sender-derived host.
+    const { loadSiteRules } = await import('../../src/shared/settings.js');
+    const rules = await loadSiteRules();
+    expect(rules['host-from-sender.example']).toBe(false);
+  });
+
+  it('setSiteEnabled errors when no hostname can be derived', async () => {
+    const res = await dispatch(
+      req(MSG.SET_SITE_ENABLED, { enabled: true }),
+      { id: 'test-ext-id' }, // no url, no payload.hostname
+    );
+    expect(res.ok).toBe(false);
+    expect(res.error.code).toBe('BAD_INPUT');
+  });
+
+  it('GET_STATUS reports model state + readiness + cache size', async () => {
+    const res = await dispatch(req(MSG.GET_STATUS), pageSender);
+    expect(res.ok).toBe(true);
+    expect(res.result.ready).toBe(true);
+    expect(res.result.model.status).toBe('ready');
+    expect(typeof res.result.cacheSize).toBe('number');
+  });
+
+  it('surfaces an offscreen ANALYZE error (not-ok response) as an error envelope', async () => {
+    chromeStub.chrome.runtime.sendMessage = async (msg) => {
+      if (msg.type === MSG.OFFSCREEN_ENSURE_READY) {
+        return { id: msg.id, ok: true, result: { ep: 'wasm', variant: 'primary-int8' } };
+      }
+      if (msg.type === MSG.OFFSCREEN_ANALYZE) {
+        return { id: msg.id, ok: false, error: { message: 'inference blew up', code: 'INFER' } };
+      }
+      return { id: msg.id, ok: true, result: {} };
+    };
+    const res = await dispatch(
+      req(MSG.ANALYZE_IMAGE_BYTES, {
+        bytes: { data: Array.from(new Uint8Array(fakeImageBytes())) },
+      }),
+      pageSender,
+    );
+    expect(res.ok).toBe(false);
+    expect(res.error.message).toMatch(/inference blew up/);
+  });
+
+  it('handles the browser-startup hook without throwing', async () => {
+    let startupHandler;
+    chromeStub.chrome.runtime.onStartup = { addListener: (fn) => (startupHandler = fn) };
+    vi.resetModules();
+    await import('../../src/background/service-worker.js');
+    expect(() => startupHandler()).not.toThrow();
+  });
+
+  it('survives a 50-image concurrent stampede with no lost results or duplicate inferences', async () => {
+    // 50 unique images analyzed concurrently. Each unique content must infer exactly once
+    // (dedup by content hash), and every caller must get a result (none dropped).
+    const N = 50;
+    let inferCount = 0;
+    chromeStub.chrome.runtime.sendMessage = async (msg) => {
+      if (msg.type === MSG.OFFSCREEN_ENSURE_READY) {
+        return { id: msg.id, ok: true, result: { ep: 'wasm', variant: 'primary-int8' } };
+      }
+      if (msg.type === MSG.OFFSCREEN_ANALYZE) {
+        inferCount++;
+        await new Promise((r) => setTimeout(r, 2)); // small async latency
+        return {
+          id: msg.id,
+          ok: true,
+          result: { score: 0.9, verdict: 'ai', reasons: [], ep: 'wasm', latencyMs: 1 },
+        };
+      }
+      return { id: msg.id, ok: true, result: {} };
+    };
+    const results = await Promise.all(
+      Array.from({ length: N }, () =>
+        dispatch(
+          req(MSG.ANALYZE_IMAGE_BYTES, {
+            bytes: { data: Array.from(new Uint8Array(fakeImageBytes())) },
+          }),
+          pageSender,
+        ),
+      ),
+    );
+    expect(results.every((r) => r.ok)).toBe(true);
+    expect(inferCount).toBe(N); // unique content -> one inference each (no false dedup)
+    const stats = await dispatch(req(MSG.GET_TAB_STATS, { tabId: 1 }), pageSender);
+    expect(stats.result.analyzed).toBe(N);
+  });
+
+  it('collapses a same-image burst into a single inference (stampede protection)', async () => {
+    // The SAME image requested 50 times concurrently must infer ONCE (cache-stampede guard).
+    const fixed = fakeImageBytes();
+    const mk = () => ({ data: Array.from(new Uint8Array(fixed)) });
+    let inferCount = 0;
+    chromeStub.chrome.runtime.sendMessage = async (msg) => {
+      if (msg.type === MSG.OFFSCREEN_ENSURE_READY) {
+        return { id: msg.id, ok: true, result: { ep: 'wasm', variant: 'primary-int8' } };
+      }
+      if (msg.type === MSG.OFFSCREEN_ANALYZE) {
+        inferCount++;
+        await new Promise((r) => setTimeout(r, 5));
+        return {
+          id: msg.id,
+          ok: true,
+          result: { score: 0.9, verdict: 'ai', reasons: [], ep: 'wasm', latencyMs: 1 },
+        };
+      }
+      return { id: msg.id, ok: true, result: {} };
+    };
+    const results = await Promise.all(
+      Array.from({ length: 50 }, () =>
+        dispatch(req(MSG.ANALYZE_IMAGE_BYTES, { bytes: mk() }), pageSender),
+      ),
+    );
+    expect(results.every((r) => r.ok)).toBe(true);
+    expect(inferCount).toBe(1); // 50 concurrent identical -> 1 inference
+  });
+});

@@ -1,0 +1,299 @@
+/**
+ * AI Image Detector — design system tokens.
+ * Single source of truth for color, typography, spacing, radius, shadow, and motion across all
+ * extension surfaces (popup, options, onboarding) and the in-page badge component.
+ *
+ * All pages `@import url('./tokens.css');` and consume `var(--*)` tokens only — no hardcoded
+ * hex/px values in component stylesheets.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  /* ---- Color: brand + semantic (WCAG AA on the surfaces below) ---- */
+  --color-brand: #4f46e5; /* indigo-600 */
+  --color-brand-hover: #4338ca; /* indigo-700 */
+  --color-brand-active: #3730a3; /* indigo-800 */
+  --color-brand-subtle: rgba(79, 70, 229, 0.12);
+
+  --color-bg: #ffffff;
+  --color-bg-subtle: #f6f7f9;
+  --color-surface: #ffffff;
+  --color-text: #1a1d21;
+  --color-text-muted: rgba(26, 29, 33, 0.66);
+  --color-border: rgba(26, 29, 33, 0.14);
+  --color-focus-ring: #4f46e5;
+
+  /* Semantic verdict colors (used for badges + status pills) */
+  --color-ai: #c62828;
+  --color-ai-fg: #ffffff;
+  --color-real: #2e7d32;
+  --color-real-fg: #ffffff;
+  --color-uncertain: #b26a00; /* darkened amber for AA on light bg */
+  --color-uncertain-fg: #ffffff;
+  --color-neutral: #616161;
+  --color-neutral-fg: #ffffff;
+  --color-error: #c62828;
+  --color-error-bg: rgba(198, 40, 40, 0.12);
+
+  --color-ok: #2e7d32;
+  --color-ok-bg: rgba(46, 125, 50, 0.13);
+  --color-busy: #1976d2;
+  --color-busy-bg: rgba(25, 118, 210, 0.13);
+  --color-warn: #b26a00;
+  --color-warn-bg: rgba(249, 168, 37, 0.18);
+
+  /* ---- Typography ---- */
+  --font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'Cascadia Code', 'Roboto Mono', monospace;
+  --font-size-xs: 11px;
+  --font-size-sm: 12px;
+  --font-size-md: 13px;
+  --font-size-lg: 15px;
+  --font-size-xl: 18px;
+  --font-size-2xl: 20px;
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --line-height-tight: 1.3;
+  --line-height-normal: 1.5;
+
+  /* ---- Spacing (4px base scale) ---- */
+  --spacing-2xs: 2px;
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 12px;
+  --spacing-lg: 16px;
+  --spacing-xl: 24px;
+  --spacing-2xl: 32px;
+
+  /* ---- Radius ---- */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-full: 999px;
+
+  /* ---- Shadow ---- */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 2px 6px rgba(0, 0, 0, 0.14);
+  --shadow-badge: 0 2px 6px rgba(0, 0, 0, 0.4), 0 0 1px rgba(0, 0, 0, 0.2);
+
+  /* ---- Motion (gated by prefers-reduced-motion below) ---- */
+  --duration-fast: 120ms;
+  --duration-normal: 200ms;
+  --easing-standard: cubic-bezier(0.2, 0, 0, 0.1);
+
+  /* ---- Focus ---- */
+  --focus-ring: 0 0 0 2px var(--color-bg), 0 0 0 4px var(--color-focus-ring);
+  /* High-contrast ring for use on saturated (brand/verdict) surfaces where the
+     neutral ring would blend in. */
+  --focus-ring-contrast: 0 0 0 2px #ffffff, 0 0 0 4px var(--color-focus-ring);
+
+  /* ---- Form controls ---- */
+  --control-size-checkbox: 18px;
+  --target-min: 24px; /* WCAG 2.5.8 minimum pointer target (AA) */
+
+  /* ---- In-page badge overlay (content script; topmost layer) ---- */
+  --z-badge-host: 2147483646;
+  --z-badge: 2147483647;
+  --badge-shadow: var(--shadow-badge);
+}
+
+/* Dark theme overrides (system preference). */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #16181d;
+    --color-bg-subtle: #1d2026;
+    --color-surface: #1e2127;
+    --color-text: #e6e8eb;
+    --color-text-muted: rgba(230, 232, 235, 0.66);
+    --color-border: rgba(230, 232, 235, 0.16);
+    --color-focus-ring: #818cf8;
+    --color-brand-subtle: rgba(129, 140, 248, 0.16);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 2px 6px rgba(0, 0, 0, 0.5);
+  }
+}
+
+/* Respect reduced-motion preferences globally. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ---- Shared primitives ---- */
+
+.btn {
+  font-family: var(--font-family);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-sm) var(--spacing-lg);
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition:
+    background var(--duration-fast) var(--easing-standard),
+    box-shadow var(--duration-fast) var(--easing-standard);
+}
+
+.btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* On saturated (primary/danger) buttons the neutral outer ring blends into the
+   button background; use the high-contrast ring so keyboard focus stays visible. */
+.btn-primary:focus-visible,
+.btn-danger:focus-visible {
+  box-shadow: var(--focus-ring-contrast);
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.btn-primary {
+  background: var(--color-brand);
+  color: #ffffff;
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--color-brand-hover);
+  box-shadow: var(--shadow-md);
+}
+.btn-primary:active:not(:disabled) {
+  background: var(--color-brand-active);
+}
+
+.btn-danger {
+  background: var(--color-ai);
+  color: #ffffff;
+}
+.btn-danger:hover:not(:disabled) {
+  background: #b71c1c;
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-link {
+  background: none;
+  border: none;
+  color: var(--color-busy);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  /* Inline-flex + min height so the interactive target meets WCAG 2.5.8 (24px)
+     without adding visual weight to text-style actions. */
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--target-min);
+  padding: 0 var(--spacing-xs);
+  text-decoration: underline;
+  border-radius: var(--radius-sm);
+}
+.btn-link:hover {
+  text-decoration-thickness: 2px;
+  opacity: 0.85;
+}
+.btn-link:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.status-pill {
+  display: inline-block;
+  padding: var(--spacing-2xs) var(--spacing-md);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+.status-pill.ok {
+  background: var(--color-ok-bg);
+  color: var(--color-ok);
+}
+.status-pill.busy {
+  background: var(--color-busy-bg);
+  color: var(--color-busy);
+}
+.status-pill.warn {
+  background: var(--color-warn-bg);
+  color: var(--color-warn);
+}
+
+.muted {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+/* Visible focus for form controls. */
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* Loading skeleton (respects reduced-motion via the global gate). */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--color-bg-subtle);
+  border-radius: var(--radius-md);
+}
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.5), transparent);
+  animation: skeleton-shimmer 1.4s var(--easing-standard) infinite;
+}
+@keyframes skeleton-shimmer {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* Named skeleton placeholders (no inline styles — sizing lives in tokens). */
+.skeleton-pill {
+  width: 90px;
+  height: 22px;
+  border-radius: var(--radius-full);
+}
+.skeleton-line {
+  width: 70%;
+  height: 12px;
+  margin-top: var(--spacing-sm);
+}
+.skeleton-title {
+  width: 200px;
+  height: 24px;
+  margin-bottom: var(--spacing-xl);
+}
+.skeleton-panel {
+  width: 100%;
+  height: 180px;
+}
+.skeleton-hero {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto var(--spacing-lg);
+}
+.skeleton-heading {
+  width: 240px;
+  height: 22px;
+  margin: 0 auto var(--spacing-md);
+}
+.skeleton-subline {
+  width: 80%;
+  height: 14px;
+  margin: 0 auto;
+}

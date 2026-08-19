@@ -1,0 +1,76 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build, test, package, publish
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Validate release tag + version sync
+        shell: pwsh
+        run: |
+          $tag = '${{ github.ref_name }}'
+          if ($tag -notmatch '^v\d+\.\d+\.\d+(-[\w.]+)?$') {
+            throw "Tag '$tag' is not a semantic version (expected vMAJOR.MINOR.PATCH)."
+          }
+          $tagVersion = $tag -replace '^v', ''
+          $pkg = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $manifest = (Get-Content extension/manifest.json -Raw | ConvertFrom-Json).version
+          if ($tagVersion -ne $pkg) { throw "tag $tag != package.json version $pkg" }
+          if ($tagVersion -ne $manifest) { throw "tag $tag != manifest.json version $manifest" }
+          Write-Host "tag $tag matches package.json + manifest.json ($tagVersion)"
+
+      - name: Verify clean, up-to-date source tree
+        shell: pwsh
+        run: |
+          git fetch --tags --force | Out-Null
+          $status = git status --porcelain
+          if ($status) { throw "working tree is dirty:`n$status" }
+          Write-Host 'working tree clean'
+
+      - name: Install (locked)
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Tests + coverage gate
+        run: npm run cover
+
+      - name: Validate model manifest (structure + integrity pins)
+        run: npm run models:manifest
+
+      - name: Build extension
+        run: npm run build
+
+      - name: E2E suite
+        run: npm run test:e2e
+
+      - name: Package lean + bundled zips
+        run: npm run pack -- --bundled
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@fe965f7af51af5f2602596916f38a38df2e33de0 # v3.0.2
+        with:
+          # Lean zip (downloads model once at setup), bundled zip (self-contained, zero
+          # download), and the raw model asset (extracted by pack --bundled into release/).
+          files: |
+            release/ai-image-detector-*.zip
+            release/*.onnx
+            release/SHA256SUMS
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

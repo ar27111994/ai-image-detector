@@ -1,0 +1,22 @@
+{
+  "$comment": "Model delivery manifest. URLs + SHA-256 are pinned at release time. The extension downloads the chosen variant ONCE at setup, verifies SHA-256, stores in IndexedDB, and runs fully offline afterwards. Source model: haywoodsloan/ai-image-detector (Apache-2.0), SwinV2 — see docs/MODEL.md.",
+  "schemaVersion": 1,
+  "modelName": "ai-image-detector",
+  "releaseTag": "models-v1",
+  "variants": [
+    {
+      "kind": "wasm",
+      "key": "primary-int8",
+      "url": "https://github.com/ar27111994/ai-image-detector/releases/download/models-v1/haywoodsloan-int8.onnx",
+      "sha256": "4ac57050c6c20e8f2a67afb5a6809bcfa52ee0eea15d6e8ec9f17ec84959c332",
+      "sizeBytes": 326220562,
+      "inputSize": 256,
+      "mean": [0.485, 0.456, 0.406],
+      "std": [0.229, 0.224, 0.225],
+      "outputType": "logits",
+      "aiLogitIndex": 0,
+      "labels": ["artificial", "real"],
+      "license": "Apache-2.0"
+    }
+  ]
+}

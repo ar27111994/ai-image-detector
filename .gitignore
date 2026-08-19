@@ -17,6 +17,10 @@ Thumbs.db
 .vscode/
 .idea/
 
+# Python conversion toolchain (reproducible via tools/requirements-convert.txt)
+.venv/
+__pycache__/
+
 # Test artifacts
 coverage/
 test-results/
