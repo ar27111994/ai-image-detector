@@ -38,7 +38,16 @@ async function ensureReady(payload) {
 
 async function analyze(payload) {
   const { bytes, threshold } = payload;
-  if (!(bytes instanceof ArrayBuffer) || bytes.byteLength === 0) {
+  // Accept an ArrayBuffer (structured-clone preserves it) OR the structured-clone-safe
+  // { data: number[] } relay form. Reconstruct the buffer so the analysis path never depends on
+  // message-transport fidelity.
+  const buffer =
+    bytes instanceof ArrayBuffer
+      ? bytes
+      : bytes?.data && Array.isArray(bytes.data)
+        ? Uint8Array.from(bytes.data).buffer
+        : null;
+  if (!buffer || buffer.byteLength === 0) {
     throw Object.assign(new Error('analyze requires non-empty ArrayBuffer bytes'), {
       code: 'BAD_INPUT',
     });
@@ -47,7 +56,7 @@ async function analyze(payload) {
   //    C2PA/XMP/EXIF/PNG geninfo) short-circuits: skip neural inference entirely, so a proven
   //    AI image doesn't pay the inference cost and a decode/session failure can't discard an
   //    already-conclusive verdict.
-  const forensic = await extractForensicSignals(bytes);
+  const forensic = await extractForensicSignals(buffer);
   if (forensic.definitive) {
     const fused = fuseSignals(
       { neuralScore: 0, forensic },
@@ -68,7 +77,7 @@ async function analyze(payload) {
   }
 
   // 2. Neural inference (only when the forensic layer did not reach a definitive verdict).
-  const neural = await engine.analyzeImageBytes(bytes);
+  const neural = await engine.analyzeImageBytes(buffer);
 
   // 3. Fuse into a calibrated score. The user-configurable threshold classifies the verdict;
   //    the forensic definitive path (verified provenance) always overrides it.

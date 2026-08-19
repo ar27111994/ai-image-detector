@@ -215,9 +215,25 @@ into the v1.0.0 submission.
   wasn't bypassed. The forensic-only response carries `neuralScore: null` (consumers already treat
   it as optional).
 
+### Fixed (PR #1 review round 17 — XMP default-namespace + decompression cap + byte transport)
+
+- **XMP default namespace no longer bypasses provenance checks.** An unprefixed `DigitalSourceType`/
+  `CreatorTool` element inherits the in-scope default `xmlns`; when that default is a foreign
+  namespace, the element is now rejected instead of treated as namespace-free IPTC provenance.
+- **PNG zTXt/iTXt decompression is capped.** The inflate stream is read incrementally and cancelled
+  at `MAX_METADATA_BYTES` (4MB), so a small compressed chunk can no longer expand into hundreds of
+  MB (zip bomb) before the outer image-size guard applies. Over-cap chunks are rejected (skipped),
+  not fatal.
+- **In-page blob:/data: byte reads are capped before allocation.** `readElementBytes` now streams
+  with a pre-allocation cap (cancel at `MAX_IMAGE_BYTES`) instead of buffering the whole response
+  via `arrayBuffer()` first.
+- **The offscreen analyze path reconstructs the byte buffer defensively** — it accepts an
+  `ArrayBuffer` (structured clone preserves it) or the `{ data: number[] }` relay form, so analysis
+  never depends on message-transport fidelity.
+
 ### Testing
 
-- **488 tests / 35 files** (was 227/24 at v1.0.0). New unit suites for the previously untested
+- **491 tests / 35 files** (was 227/24 at v1.0.0). New unit suites for the previously untested
   popup/options/onboarding pages, the offscreen orchestrator, the service-worker router, and the
   manifest verifier (`tools/verify-manifest.mjs`). Concurrency/stress suites (50-unique and
   50-identical-image stampedes verifying exactly-once inference and cache-collapse, plus

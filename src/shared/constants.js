@@ -113,3 +113,7 @@ export const TIMEOUTS = Object.freeze({
 
 /** Hard safety cap (bytes) on a single fetched image — larger images are rejected before decode. */
 export const MAX_IMAGE_BYTES = 32 * 1024 * 1024;
+
+/** Hard cap (bytes) on a single decompressed metadata payload (zTXt/iTXt) — a small compressed
+ *  chunk can expand enormously (zip bomb), so decompression is capped well below the image cap. */
+export const MAX_METADATA_BYTES = 4 * 1024 * 1024;

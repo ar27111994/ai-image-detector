@@ -108,12 +108,20 @@ export function detectXmpAiSignatures(packets) {
     // name resolves against the in-scope bindings. This models XML namespace scoping correctly.
     const walk = (el, scope) => {
       const local = new Map(scope);
+      let defaultNs = scope.get('') ?? null; // inherit the ancestor default namespace
       for (const a of el.attributes ?? []) {
-        if (a.name.startsWith('xmlns:')) local.set(a.name.slice(6), a.value);
+        if (a.name === 'xmlns')
+          defaultNs = a.value; // element's own default-ns declaration
+        else if (a.name.startsWith('xmlns:')) local.set(a.name.slice(6), a.value);
       }
+      local.set('', defaultNs); // propagate the (possibly overridden) default ns to children
       const resolve = (prefixedName) => {
         const colon = prefixedName.indexOf(':');
-        if (colon === -1) return { local: prefixedName, ns: null }; // unqualified
+        if (colon === -1) {
+          // Unqualified name: its namespace is the in-scope DEFAULT namespace. A foreign default
+          // (e.g. xmlns="http://foreign") makes this foreign — not namespace-free IPTC.
+          return { local: prefixedName, ns: defaultNs ?? null };
+        }
         const prefix = prefixedName.slice(0, colon);
         // A prefixed name whose prefix is NOT declared in scope is foreign — mark it so it is
         // rejected (do not fall back to "unqualified"). Only a prefix that resolves to the

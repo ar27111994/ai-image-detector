@@ -144,6 +144,16 @@ describe('offscreen orchestrator', () => {
     expect(res.result.verdict).not.toBe(dflt.result.verdict); // threshold actually applied
   });
 
+  it('OFFSCREEN_ANALYZE accepts the structured-clone { data: number[] } byte relay form', async () => {
+    // The content->SW relay sends { data: number[] }; the offscreen must reconstruct a buffer from
+    // it (the analysis path must not depend on ArrayBuffer surviving message transport).
+    const res = await dispatch(
+      makeRequest(MSG.OFFSCREEN_ANALYZE, { bytes: { data: [1, 2, 3, 4] } }),
+    );
+    expect(res.ok).toBe(true);
+    expect(res.result.score).toBeDefined();
+  });
+
   it('surfaces engine errors as an error response (not a throw)', async () => {
     const engine = await import('../../src/offscreen/inference-engine.js');
     engine.analyzeImageBytes.mockRejectedValueOnce(new Error('decode failed'));

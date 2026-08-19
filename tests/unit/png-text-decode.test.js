@@ -70,6 +70,18 @@ describe('png-text extractPngText decode paths', () => {
     expect(await extractPngText(pngWith([idat]))).toEqual([]);
   });
 
+  it('rejects a zTXt chunk whose decompressed payload exceeds the metadata cap (zip-bomb guard)', async () => {
+    // A small compressed chunk that inflates past MAX_METADATA_BYTES must be skipped (the chunk is
+    // rejected, not the whole image), proving the decompression cap cancels the stream.
+    const huge = new Uint8Array(8 * 1024 * 1024).fill(0x61); // 8MB of 'a' -> tiny when deflated
+    const compressed = await deflate(huge);
+    expect(compressed.length).toBeLessThan(huge.length); // sanity: it really is a zip-bomb ratio
+    const kv = new Uint8Array([...enc.encode('parameters'), 0, 0, ...compressed]);
+    const pairs = await extractPngText(pngWith([pngChunk('zTXt', kv)]));
+    // The over-cap chunk is skipped (corrupt/rejected chunk => not in the output).
+    expect(pairs.find((p) => p.key === 'parameters')).toBeUndefined();
+  });
+
   it('skips a corrupt tEXt chunk without throwing', async () => {
     const bad = pngChunk('tEXt', new Uint8Array([1, 2, 3])); // no null separator
     const good = pngChunk('tEXt', new Uint8Array([...enc.encode('a'), 0, ...enc.encode('b')]));

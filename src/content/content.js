@@ -3,7 +3,7 @@
  * renders confidence badges. Runs in the page's isolated world (no WASM here — all inference
  * happens in the offscreen document).
  */
-import { DEFAULT_SETTINGS, MSG, TIMEOUTS, VERDICT } from '../shared/constants.js';
+import { DEFAULT_SETTINGS, MAX_IMAGE_BYTES, MSG, TIMEOUTS, VERDICT } from '../shared/constants.js';
 import { makeRequest, sendRequest } from '../shared/protocol.js';
 import {
   discoverBackgroundImages,
@@ -214,9 +214,30 @@ async function readElementBytes(el, url) {
   try {
     const res = await fetch(url);
     if (!res.ok) return null;
-    const buf = await res.arrayBuffer();
-    if (buf.byteLength === 0 || buf.byteLength > 32 * 1024 * 1024) return null;
-    return { data: Array.from(new Uint8Array(buf)) };
+    // Stream with a pre-allocation cap: a page-controlled blob:/data: response has no trustworthy
+    // Content-Length, so we read chunks and bail the moment the cap is exceeded — arrayBuffer()
+    // would buffer the entire response before we could measure it.
+    const reader = res.body.getReader();
+    const chunks = [];
+    let received = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      received += value.byteLength;
+      if (received > MAX_IMAGE_BYTES) {
+        await reader.cancel().catch(() => {});
+        return null; // over cap — reject before any large allocation
+      }
+      chunks.push(value);
+    }
+    if (received === 0) return null;
+    const buf = new Uint8Array(received);
+    let offset = 0;
+    for (const c of chunks) {
+      buf.set(c, offset);
+      offset += c.length;
+    }
+    return { data: Array.from(buf) };
   } catch {
     return null;
   }

@@ -264,6 +264,15 @@ describe('xmp.detectXmpAiSignatures', () => {
     expect(hit).toBe(true); // the earlier, correctly-scoped property still resolves to IPTC
   });
 
+  it('rejects an unprefixed DigitalSourceType under a foreign DEFAULT namespace', () => {
+    // Adversarial: an unprefixed <DigitalSourceType> element inherits the default xmlns — when that
+    // default is a foreign namespace, the element is NOT the IPTC property and must not be trusted.
+    const { hit } = detectXmpAiSignatures([
+      '<x:xmpmeta xmlns="http://evil.example/not-iptc"><DigitalSourceType><rdf:Seq><rdf:li>trainedAlgorithmicMedia</rdf:li></rdf:Seq></DigitalSourceType></x:xmpmeta>',
+    ]);
+    expect(hit).toBe(false);
+  });
+
   it('honors a single-quoted xmlns binding (XML allows either quote style)', () => {
     // The namespace declaration is single-quoted; the prefix must still resolve to the canonical
     // IPTC namespace and the property still count.

@@ -18,7 +18,7 @@
 - [x] Post-release audit + hardening (2026-08-16): 32 findings fixed — accuracy docs corrected to
       the shipped numbers (84.2% raw / 83.0% augmented), NOTICE added (REQ-21), CodeQL + release
       gates + checksums, WCAG/accessibility fixes, design-token expansion, DRY refactors, offscreen
-      crash recovery, and unit tests for all previously-untested modules (<!-- AUTO:TEST_COUNT -->488<!-- /AUTO:TEST_COUNT --> tests / <!-- AUTO:TEST_FILES -->35<!-- /AUTO:TEST_FILES --> files).
+      crash recovery, and unit tests for all previously-untested modules (<!-- AUTO:TEST_COUNT -->491<!-- /AUTO:TEST_COUNT --> tests / <!-- AUTO:TEST_FILES -->35<!-- /AUTO:TEST_FILES --> files).
 - [x] PR #1 review fixes (2026-08-17): concurrent-download dedup (abandonable + supersession-safe
       via generation token) + WebGPU session-leak release; CodeQL hygiene (PNG iTXt dead store,
       pack.mjs TOCTOU); conversion-toolchain pins bumped (onnx 1.21.0, pillow 12.3.0,
@@ -86,3 +86,7 @@
       short-circuits neural inference (was latent — fusion returned 0.99/AI either way, but the
       inference ran and a session failure could discard a conclusive verdict). Implements the
       documented "forensic fast path" in ARCHITECTURE.md.
+- [x] PR #1 review round 19 (2026-08-19): XMP default-namespace handled (an unprefixed element under
+      a foreign default xmlns is rejected, not treated as IPTC); PNG zTXt/iTXt decompression capped at
+      MAX_METADATA_BYTES with stream cancel (zip-bomb guard); in-page blob:/data: reads capped before
+      allocation; offscreen analyze reconstructs the buffer from ArrayBuffer or { data: number[] }.

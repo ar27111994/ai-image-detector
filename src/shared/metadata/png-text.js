@@ -3,6 +3,7 @@
  * Pure JS; zTXt/compressed iTXt inflated via DecompressionStream (Chrome 80+, all ext contexts).
  */
 import { parsePngChunks } from './containers.js';
+import { MAX_METADATA_BYTES } from '../constants.js';
 
 /** A1111/Fooocus/Civitai "parameters" value fingerprint. */
 const A1111_PARAMS_RE = /(Steps|Sampler|CFG scale|Seed|Model hash|Model)\s*:/i;
@@ -43,10 +44,30 @@ function decodeText(data) {
 }
 
 async function inflate(data) {
+  // Read the decompression stream incrementally and cancel at the metadata cap: a small zTXt/iTXt
+  // chunk can expand to hundreds of MB (zip bomb), exhausting the offscreen document before the
+  // outer image-size guard helps. Over-cap input is rejected (throws), not truncated.
   const ds = new DecompressionStream('deflate');
-  const stream = new Blob([data]).stream().pipeThrough(ds);
-  const buf = await new Response(stream).arrayBuffer();
-  return new Uint8Array(buf);
+  const reader = new Blob([data]).stream().pipeThrough(ds).getReader();
+  const chunks = [];
+  let received = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    received += value.byteLength;
+    if (received > MAX_METADATA_BYTES) {
+      await reader.cancel().catch(() => {});
+      throw new Error('decompressed metadata exceeds the size cap (possible zip bomb)');
+    }
+    chunks.push(value);
+  }
+  const out = new Uint8Array(received);
+  let offset = 0;
+  for (const c of chunks) {
+    out.set(c, offset);
+    offset += c.length;
+  }
+  return out;
 }
 
 /**

@@ -9,6 +9,27 @@ import { MSG } from '../../src/shared/constants.js';
 
 const realFetch = globalThis.fetch;
 
+/** A fetch() Response stub whose body streams `bytes` in chunks (matches readElementBytes). */
+function streamResponse(bytes) {
+  const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  return {
+    ok: true,
+    body: {
+      getReader: () => {
+        let i = 0;
+        const chunk = 8192;
+        return {
+          read: async () =>
+            i < u8.length
+              ? { done: false, value: u8.slice(i, (i += chunk)) }
+              : { done: true, value: undefined },
+          cancel: async () => {},
+        };
+      },
+    },
+  };
+}
+
 // Stub discovery + badges at the module boundary so we test content.js's queueing logic,
 // not DOM parsing or shadow-DOM rendering (those have their own suites).
 const discoverState = { images: [] };
@@ -137,10 +158,7 @@ describe('content script orchestrator', () => {
   it('reads blob: image bytes in-page and sends them via ANALYZE_IMAGE_BYTES', async () => {
     discoverState.images = [makeImg('blob:https://x/abc')];
     const sent = [];
-    globalThis.fetch = vi.fn(async () => ({
-      ok: true,
-      arrayBuffer: async () => new Uint8Array([1, 2, 3, 4]).buffer,
-    }));
+    globalThis.fetch = vi.fn(async () => streamResponse(new Uint8Array([1, 2, 3, 4])));
     await loadContent({
       sendImpl: async (msg) => {
         sent.push(msg.type);
@@ -574,10 +592,9 @@ describe('content script orchestrator', () => {
   it('returns null (skip) for a blob: image whose bytes exceed the in-page size cap', async () => {
     discoverState.images = [makeImg('blob:https://x/toobig')];
     const sent = [];
-    globalThis.fetch = vi.fn(async () => ({
-      ok: true,
-      arrayBuffer: async () => new ArrayBuffer(33 * 1024 * 1024), // > 32MB in-page cap
-    }));
+    globalThis.fetch = vi.fn(
+      async () => streamResponse(new Uint8Array(33 * 1024 * 1024)), // > 32MB in-page cap
+    );
     await loadContent({
       sendImpl: async (msg) => {
         sent.push(msg.type);
