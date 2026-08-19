@@ -3,7 +3,7 @@
  * renders confidence badges. Runs in the page's isolated world (no WASM here — all inference
  * happens in the offscreen document).
  */
-import { DEFAULT_SETTINGS, MAX_IMAGE_BYTES, MSG, TIMEOUTS, VERDICT } from '../shared/constants.js';
+import { DEFAULT_SETTINGS, MAX_RELAY_BYTES, MSG, TIMEOUTS, VERDICT } from '../shared/constants.js';
 import { makeRequest, sendRequest } from '../shared/protocol.js';
 import {
   discoverBackgroundImages,
@@ -216,7 +216,8 @@ async function readElementBytes(el, url) {
     if (!res.ok) return null;
     // Stream with a pre-allocation cap: a page-controlled blob:/data: response has no trustworthy
     // Content-Length, so we read chunks and bail the moment the cap is exceeded — arrayBuffer()
-    // would buffer the entire response before we could measure it.
+    // would buffer the entire response before we could measure it. The relay cap is smaller than
+    // the image cap because the structured-clone { data: number[] } transport boxes each byte.
     const reader = res.body.getReader();
     const chunks = [];
     let received = 0;
@@ -224,7 +225,7 @@ async function readElementBytes(el, url) {
       const { done, value } = await reader.read();
       if (done) break;
       received += value.byteLength;
-      if (received > MAX_IMAGE_BYTES) {
+      if (received > MAX_RELAY_BYTES) {
         await reader.cancel().catch(() => {});
         return null; // over cap — reject before any large allocation
       }

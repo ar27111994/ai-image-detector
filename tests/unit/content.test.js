@@ -592,8 +592,9 @@ describe('content script orchestrator', () => {
   it('returns null (skip) for a blob: image whose bytes exceed the in-page size cap', async () => {
     discoverState.images = [makeImg('blob:https://x/toobig')];
     const sent = [];
+    const { MAX_RELAY_BYTES } = await import('../../src/shared/constants.js');
     globalThis.fetch = vi.fn(
-      async () => streamResponse(new Uint8Array(33 * 1024 * 1024)), // > 32MB in-page cap
+      async () => streamResponse(new Uint8Array(MAX_RELAY_BYTES + 1024)), // just over the relay cap
     );
     await loadContent({
       sendImpl: async (msg) => {

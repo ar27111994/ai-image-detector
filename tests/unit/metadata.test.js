@@ -117,6 +117,19 @@ describe('png-text.detectPngAiSignatures', () => {
     const { hit } = detectPngAiSignatures([{ key: 'Comment', value: 'holiday photo 2024' }]);
     expect(hit).toBe(false);
   });
+  it('does NOT treat a free-text Comment/Title that merely names a generator as provenance', () => {
+    // Regression: bare generator-name matching is restricted to software-identifying keys. A
+    // Comment/Title that merely discusses "stable diffusion" / "midjourney" is not a hit.
+    expect(
+      detectPngAiSignatures([{ key: 'Comment', value: 'a study of stable diffusion artifacts' }])
+        .hit,
+    ).toBe(false);
+    expect(detectPngAiSignatures([{ key: 'Title', value: 'Made with midjourney' }]).hit).toBe(
+      false,
+    );
+    // But a software-identifying key still flags.
+    expect(detectPngAiSignatures([{ key: 'Software', value: 'stable diffusion' }]).hit).toBe(true);
+  });
 });
 
 describe('xmp.detectXmpAiSignatures', () => {

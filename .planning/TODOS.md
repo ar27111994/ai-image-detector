@@ -18,7 +18,7 @@
 - [x] Post-release audit + hardening (2026-08-16): 32 findings fixed — accuracy docs corrected to
       the shipped numbers (84.2% raw / 83.0% augmented), NOTICE added (REQ-21), CodeQL + release
       gates + checksums, WCAG/accessibility fixes, design-token expansion, DRY refactors, offscreen
-      crash recovery, and unit tests for all previously-untested modules (<!-- AUTO:TEST_COUNT -->493<!-- /AUTO:TEST_COUNT --> tests / <!-- AUTO:TEST_FILES -->35<!-- /AUTO:TEST_FILES --> files).
+      crash recovery, and unit tests for all previously-untested modules (<!-- AUTO:TEST_COUNT -->494<!-- /AUTO:TEST_COUNT --> tests / <!-- AUTO:TEST_FILES -->35<!-- /AUTO:TEST_FILES --> files).
 - [x] PR #1 review fixes (2026-08-17): concurrent-download dedup (abandonable + supersession-safe
       via generation token) + WebGPU session-leak release; CodeQL hygiene (PNG iTXt dead store,
       pack.mjs TOCTOU); conversion-toolchain pins bumped (onnx 1.21.0, pillow 12.3.0,
@@ -97,3 +97,8 @@
 - [x] PR #1 review round 21 (2026-08-19): XMP default-namespace is now spec-correct — elements resolve
       against the in-scope default xmlns, but unprefixed attributes stay namespace-less (per XML
       Namespaces). Split resolve() into element vs attribute paths; regression tests cover both.
+- [x] PR #1 review round 22 (2026-08-19): PNG bare-name matching restricted to software-identifying
+      keys (a Comment/Title discussing a generator is not provenance); blob:/data: relay capped at
+      MAX_RELAY_BYTES (4MB) since { data:number[] } boxes each byte; CI remote-URL scan ignores
+      comment-only lines. C2PA unsigned-claim promotion is by-design (documented; no signature
+      validation in v1) — replied, not changed.

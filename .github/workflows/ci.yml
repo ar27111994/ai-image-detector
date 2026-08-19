@@ -81,11 +81,18 @@ jobs:
       - name: No unexpected remote URLs in shipped runtime
         shell: pwsh
         run: |
+          # Scan for remote URLs in EXECUTABLE code only — strip line comments and block-comment
+          # lines so a documentation example (e.g. a placeholder namespace) doesn't trip the gate.
           $bad = Get-ChildItem -Recurse src -Filter *.js |
             Select-String -Pattern 'https?://' |
-            Where-Object { $_.Line -notmatch 'github\.com/ar27111994|huggingface\.co|iptc\.org|ns\.adobe\.com|w3\.org' }
+            Where-Object {
+              $t = $_.Line.Trim()
+              $isComment = $t.StartsWith('//') -or $t.StartsWith('*') -or $t.StartsWith('/*')
+              -not $isComment -and
+              ($_.Line -notmatch 'github\.com/ar27111994|huggingface\.co|iptc\.org|ns\.adobe\.com|w3\.org')
+            }
           if ($bad) { $bad | ForEach-Object { Write-Host "$($_.Path):$($_.LineNumber): $($_.Line)" }; throw 'unexpected remote URL in runtime code' }
-          Write-Host 'no unexpected remote URLs in src/'
+          Write-Host 'no unexpected remote URLs in src/ (executable code)'
 
   build:
     name: Build + dist verification (asserts onnxruntime version coupling)

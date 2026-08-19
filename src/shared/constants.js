@@ -117,3 +117,9 @@ export const MAX_IMAGE_BYTES = 32 * 1024 * 1024;
 /** Hard cap (bytes) on a single decompressed metadata payload (zTXt/iTXt) — a small compressed
  *  chunk can expand enormously (zip bomb), so decompression is capped well below the image cap. */
 export const MAX_METADATA_BYTES = 4 * 1024 * 1024;
+
+/** Cap (bytes) on the in-page blob:/data: byte relay. The content→SW hop is a structured-clone
+ *  `{ data: number[] }`, so each byte becomes a boxed number — a full-size image would expand to
+ *  hundreds of MB of transient objects. The relay is capped well below the image cap; larger
+ *  blob:/data: images are skipped (they are rare and typically already URL-backed). */
+export const MAX_RELAY_BYTES = 4 * 1024 * 1024;

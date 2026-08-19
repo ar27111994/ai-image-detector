@@ -244,9 +244,23 @@ into the v1.0.0 submission.
   namespace-less and is accepted (attribute case). Regression tests cover both directions (foreign
   default ns on an element → no signal; foreign default ns with an unprefixed attribute → trusted).
 
+### Fixed (PR #1 review round 19 — PNG free-text + relay cap + CI scan hardening)
+
+- **PNG generator-name matching is restricted to software-identifying keys.** A free-form
+  `Comment`/`Title` that merely discusses "stable diffusion" / "midjourney" no longer becomes a
+  definitive provenance hit; bare-name matching now only runs on `Software`/`CreatorTool`/`Tool`/
+  `Generator`/`Source` keys. Structured fingerprints (A1111 params, ComfyUI `class_type`, InvokeAI
+  keys, NovelAI JSON) still fire on their own keys.
+- **The blob:/data: byte relay is capped at `MAX_RELAY_BYTES` (4MB).** The content→SW transport is a
+  structured-clone `{ data: number[] }`, so each byte becomes a boxed number — a full-size image
+  would expand to hundreds of MB of transient objects. Larger blob:/data: images are skipped (they
+  are rare and typically URL-backed).
+- **The CI remote-URL scan ignores comment-only lines** (`//`, `*`, `/*`), so a documentation
+  example can't trip the security gate while executable remote URLs still fail the build.
+
 ### Testing
 
-- **493 tests / 35 files** (was 227/24 at v1.0.0). New unit suites for the previously untested
+- **494 tests / 35 files** (was 227/24 at v1.0.0). New unit suites for the previously untested
   popup/options/onboarding pages, the offscreen orchestrator, the service-worker router, and the
   manifest verifier (`tools/verify-manifest.mjs`). Concurrency/stress suites (50-unique and
   50-identical-image stampedes verifying exactly-once inference and cache-collapse, plus

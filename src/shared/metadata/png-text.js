@@ -30,6 +30,9 @@ const AI_SOFTWARE = [
   'fooocus',
 ];
 
+/** PNG text keys that identify the producing SOFTWARE (not free-form text like Comment/Title). */
+const PNG_SOFTWARE_KEYS = new Set(['software', 'creatortool', 'tool', 'generator', 'source']);
+
 /**
  * Decode a tEXt chunk: keyword\x00value (latin-1).
  * @param {Uint8Array} data
@@ -172,7 +175,10 @@ export function detectPngAiSignatures(pairs) {
     if (k === 'comment' && v.startsWith('{') && v.includes('"uc"')) {
       signals.push('png:Comment JSON with "uc" (NovelAI)');
     }
-    if (AI_SOFTWARE.some((s) => v.includes(s))) {
+    // Bare generator-name matching is restricted to software-identifying keys. Free-form keys
+    // (Comment/Title/prompt text) that merely DISCUSS a generator must not become a definitive
+    // provenance hit.
+    if (PNG_SOFTWARE_KEYS.has(k) && AI_SOFTWARE.some((s) => v.includes(s))) {
       signals.push(`png:${key} references "${AI_SOFTWARE.find((s) => v.includes(s))}"`);
     }
   }
