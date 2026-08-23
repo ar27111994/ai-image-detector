@@ -8,7 +8,7 @@ onnxruntime==1.24.1
 onnxslim==0.1.95
 huggingface_hub==0.34.4
 transformers==5.5.0
-numpy==2.3.2
+numpy==2.5.2
 pillow==12.3.0
 onnxconverter-common==1.16.0
 onnxscript==0.7.1
