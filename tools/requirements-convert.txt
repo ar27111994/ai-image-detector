@@ -1,7 +1,7 @@
 # Model conversion toolchain (Phase 1, one-time / CI-optional). NOT needed to build the extension.
 # Pinned to versions with Python 3.14 wheels. CPU-only torch keeps the install small.
 torch==2.13.0+cpu
-timm==1.0.19
+timm==1.0.28
 safetensors==0.6.2
 onnx==1.22.0
 onnxruntime==1.29.0
