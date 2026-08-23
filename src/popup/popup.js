@@ -30,7 +30,7 @@ async function init() {
 
   let status = null;
   let settings = { ...DEFAULT_SETTINGS };
-  let tabStats = null;
+  let tabStats;
   try {
     const [statusRes, settingsRes, statsRes] = await Promise.all([
       sendRequest(makeRequest(MSG.GET_STATUS, {}, null), { timeoutMs: TIMEOUTS.UI_QUERY_MS }),

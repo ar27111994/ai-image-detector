@@ -170,7 +170,7 @@ export async function analyzeImageBytes(bytes) {
   try {
     bitmap = await createImageBitmap(blob);
   } catch (err) {
-    throw new Error(`image decode failed: ${err?.message ?? err}`);
+    throw new Error(`image decode failed: ${err?.message ?? err}`, { cause: err });
   }
 
   try {

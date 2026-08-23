@@ -18,6 +18,8 @@ updates:
         patterns: ['onnxruntime-web', 'onnxruntime-node']
       vitest:
         patterns: ['vitest', '@vitest/*']
+      eslint:
+        patterns: ['eslint', '@eslint/*', 'eslint-*']
     # vitest 4.x is a major with breaking async/observer flushing semantics; it fails
     # tests/unit/content.test.js (image-discovery assertions). Ignore >=4 until a deliberate
     # migration. Vitest + @vitest/coverage-v8 still update together (group above) on 3.x.
