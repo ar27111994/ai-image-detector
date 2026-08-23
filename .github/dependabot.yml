@@ -16,6 +16,8 @@ updates:
     groups:
       onnxruntime:
         patterns: ['onnxruntime-web', 'onnxruntime-node']
+      vitest:
+        patterns: ['vitest', '@vitest/*']
 
   - package-ecosystem: github-actions
     directory: '/'
