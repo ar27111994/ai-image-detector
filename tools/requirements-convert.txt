@@ -3,12 +3,12 @@
 torch==2.13.0+cpu
 timm==1.0.19
 safetensors==0.6.2
-onnx==1.21.0
-onnxruntime==1.24.1
+onnx==1.22.0
+onnxruntime==1.29.0
 onnxslim==0.1.95
 huggingface_hub==0.34.4
 transformers==5.5.0
-numpy==2.3.2
+numpy==2.5.2
 pillow==12.3.0
 onnxconverter-common==1.16.0
 onnxscript==0.7.1
