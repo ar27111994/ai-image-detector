@@ -14,7 +14,7 @@
 ## Snapshot (2026-08-19)
 
 - **Repo:** `github.com/ar27111994/ai-image-detector` · local `C:\Projects\AI Image Detector`
-- **Branch:** `gsd/m1-ai-image-detector` · PR #1 open against `main`
+- **Branch:** `gsd/m1-ai-image-detector` · PR #1 **merged** into `main`
 - **Version:** v1.0.0 (2026-08-16) · MIT license · MV3 Chrome extension
 - **Bounty:** poidh.xyz/arbitrum/bounty/323 — "local AI challenge" (winner-take-all)
 - ✅ **Tests:** 227/227 unit+integration · e2e 6/6 · lint/prettier clean · build OK

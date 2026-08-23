@@ -72,5 +72,5 @@ that built this repo. The full chat history is searchable in Hermes via `session
 
 ## Status
 
-Current milestone complete (v1.0.0, PR #1 in review). Remaining manual step (owner):
+Current milestone complete (v1.0.0, PR #1 merged). Remaining manual step (owner):
 submit the poidh.xyz #323 claim.
