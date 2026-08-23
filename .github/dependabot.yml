@@ -22,6 +22,13 @@ updates:
     schedule:
       interval: weekly
     labels: ['ci']
+    # codeql-action init/analyze must change version together (a mismatch fails the
+    # CodeQL analyze step with "Loaded config for X, running Y"), so group every
+    # github/codeql-action/* update into one PR.
+    groups:
+      codeql:
+        patterns:
+          - 'github/codeql-action/*'
 
   # Python tooling used for model conversion/quantization (tools/*.py). These are dev-only
   # (never shipped in the extension) but are kept current for reproducibility + supply-chain
