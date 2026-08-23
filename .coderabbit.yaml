@@ -1,0 +1,18 @@
+# CodeRabbit AI review configuration.
+#
+# The "CodeRabbit" check is a *required* status check on `main` (branch ruleset).
+# For Dependabot PRs to auto-merge, CodeRabbit must actually post its review check
+# on them. The two things that would stop that are a disabled auto-review, or
+# `dependabot[bot]` being in `ignore_usernames`. This config keeps both off so bot
+# PRs are reviewed (and the required check reports) instead of being silently skipped.
+
+language: 'js'
+
+reviews:
+  auto_review:
+    enabled: true
+    auto_incremental_review: true
+    # Deliberately empty: do NOT skip dependabot[bot]/renovate[bot] PRs. If reviews
+    # are still not appearing on bot PRs, check app.coderabbit.ai (repo link, seat/plan,
+    # org-level auto-review toggle) — see the automerge section of the repo docs.
+    ignore_usernames: []
