@@ -1,0 +1,12 @@
+# CodeRabbit AI review configuration.
+#
+# "CodeRabbit" is a *required* status check on `main` (branch ruleset). For Dependabot
+# PRs to auto-merge, CodeRabbit must post its review check on them. The default config
+# already reviews every eligible non-draft PR targeting the default branch, so the only
+# thing that matters here is NOT adding `dependabot[bot]` to `ignore_usernames` (which
+# would silently skip bot PRs). This file just pins auto-review ON and leaves the
+# bot-ignore list default (empty).
+
+reviews:
+  auto_review:
+    enabled: true
