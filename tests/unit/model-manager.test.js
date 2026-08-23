@@ -424,9 +424,8 @@ describe('model-manager.downloadVariant full flow', () => {
   it('a start superseded by a reset during the readiness read rejects (never reports a removed model ready)', async () => {
     // Model is ready; a start reads readiness (parks), a reset advances the generation mid-read,
     // and the start must reject SUPERSEDED — not return alreadyReady for a model reset removes.
-    const { ensureModel, resetModelState, beginModelSetup } = await import(
-      '../../src/background/model-manager.js'
-    );
+    const { ensureModel, resetModelState, beginModelSetup } =
+      await import('../../src/background/model-manager.js');
     store.clear();
     idbData.clear();
     store.set('model.state.v1', { status: 'ready', variant: 'primary-int8' });

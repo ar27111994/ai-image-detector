@@ -6,9 +6,8 @@ import { describe, expect, it } from 'vitest';
 
 globalThis.location = { href: 'https://example.test/articles/1' };
 
-const { bestFromSrcset, resolveUrl, urlForElement, meetsMinSize, elementSize } = await import(
-  '../../src/content/discovery.js'
-);
+const { bestFromSrcset, resolveUrl, urlForElement, meetsMinSize, elementSize } =
+  await import('../../src/content/discovery.js');
 
 // Minimal Element stub for urlForElement/meetsMinSize.
 function makeEl(tag, attrs = {}, computed = {}) {

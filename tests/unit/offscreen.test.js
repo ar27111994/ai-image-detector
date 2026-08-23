@@ -99,9 +99,8 @@ describe('offscreen orchestrator', () => {
 
   it('a definitive forensic signal short-circuits neural inference (no analyzeImageBytes call)', async () => {
     const engine = await import('../../src/offscreen/inference-engine.js');
-    const { extractForensicSignals } = await import(
-      '../../src/shared/metadata/forensic-extractor.js'
-    );
+    const { extractForensicSignals } =
+      await import('../../src/shared/metadata/forensic-extractor.js');
     extractForensicSignals.mockResolvedValueOnce({
       definitive: true,
       summary: ['c2pa:manifest-store present'],
