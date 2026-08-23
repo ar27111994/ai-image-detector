@@ -138,9 +138,8 @@ describe('security: hostile message envelopes (protocol robustness)', () => {
 
 describe('security: full-pipeline XSS through the forensic fusion path', () => {
   it('a PNG carrying a hostile A1111 geninfo yields a definitive verdict with inert reasons', async () => {
-    const { extractForensicSignals } = await import(
-      '../../src/shared/metadata/forensic-extractor.js'
-    );
+    const { extractForensicSignals } =
+      await import('../../src/shared/metadata/forensic-extractor.js');
     const { fuseSignals } = await import('../../src/shared/fusion/fuse.js');
     // Craft a PNG tEXt chunk whose value is both a valid A1111 signature AND contains HTML.
     const enc = new TextEncoder();
