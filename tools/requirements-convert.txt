@@ -2,7 +2,7 @@
 # Pinned to versions with Python 3.14 wheels. CPU-only torch keeps the install small.
 torch==2.13.0+cpu
 timm==1.0.28
-safetensors==0.6.2
+safetensors==0.8.0
 onnx==1.22.0
 onnxruntime==1.29.0
 onnxslim==0.1.95
