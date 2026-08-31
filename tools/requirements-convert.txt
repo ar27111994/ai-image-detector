@@ -6,7 +6,7 @@ safetensors==0.8.0
 onnx==1.22.0
 onnxruntime==1.29.0
 onnxslim==0.1.95
-huggingface_hub==1.28.0
+huggingface_hub==1.29.0
 transformers==5.5.0
 numpy==2.5.2
 pillow==12.3.0
